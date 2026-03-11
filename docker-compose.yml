@@ -1,0 +1,71 @@
+version: "3.8"
+
+# ── Microservices Architecture ──
+# 1. Frontend (nginx)  — static assets + reverse proxy
+# 2. Backend  (node)   — Express API + Handlebars SSR
+# 3. Database (mysql)  — local dev only; production uses Cloud SQL
+
+services:
+
+  # ── Service 1: Frontend ──
+  frontend:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: theepicbook-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # ── Service 2: Backend ──
+  backend:
+    build:
+      context: ./theepicbook
+      dockerfile: Dockerfile
+    container_name: theepicbook-backend
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - NODE_ENV=${NODE_ENV:-development}
+      - DATABASE_URL=${DATABASE_URL}
+    networks:
+      - app-network
+
+  # ── Service 3: Database (local dev only) ──
+  database:
+    image: mysql:8.0
+    container_name: theepicbook-database
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-devpassword}
+      MYSQL_DATABASE: bookstore
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: ${DB_PASSWORD:-devpassword}
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./theepicbook/db/BuyTheBook_Schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./theepicbook/db/author_seed.sql:/docker-entrypoint-initdb.d/02-authors.sql
+      - ./theepicbook/db/books_seed.sql:/docker-entrypoint-initdb.d/03-books.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "3306:3306"
+    networks:
+      - app-network
+    profiles:
+      - local
+
+volumes:
+  db-data:
+
+networks:
+  app-network:
+    driver: bridge

@@ -1,0 +1,11 @@
+version: "3.8"
+
+services:
+  backend:
+    environment:
+      - NODE_ENV=development
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"

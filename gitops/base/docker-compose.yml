@@ -1,0 +1,31 @@
+version: "3.8"
+
+# ── Production deployment (Cloud SQL as database) ──
+# 1. Frontend (nginx)  — static assets + reverse proxy
+# 2. Backend  (node)   — Express API + Handlebars SSR
+# 3. Database          — Cloud SQL (managed, not containerized)
+
+services:
+
+  frontend:
+    image: ${ECR_REGISTRY}/theepicbook-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  backend:
+    image: ${ECR_REGISTRY}/theepicbook-backend:latest
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - DATABASE_URL=${DATABASE_URL}
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

@@ -1,0 +1,11 @@
+node_modules
+.git
+db/
+docs
+*.md
+.travis.yml
+.eslintrc.json
+.eslintignore
+.dockerignore
+Dockerfile
+npm-debug.log

@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cloudopshub
+  namespace: argocd
+spec:
+  description: CloudOpsHub infrastructure project
+  sourceRepos:
+    - https://github.com/your-org/CloudOpsHub.git
+  destinations:
+    - namespace: theepicbook
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace

@@ -1,0 +1,9 @@
+variable "project_id" { type = string }
+variable "project_name" { type = string }
+variable "environment" { type = string }
+variable "zone" { type = string }
+variable "instance_type" { type = string }
+variable "subnet_id" { type = string }
+variable "db_secret_name" { type = string }
+variable "aws_account_id" { type = string }
+variable "aws_region" { type = string }

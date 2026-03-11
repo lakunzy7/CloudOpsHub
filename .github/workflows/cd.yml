@@ -1,0 +1,91 @@
+name: CD
+on:
+    workflow_run:
+        workflows: [CI]
+        types: [completed]
+        branches: [main]
+
+permissions:
+    contents: write
+
+env:
+    ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+    ECR_REPO_BACKEND: theepicbook-backend
+    ECR_REPO_FRONTEND: theepicbook-frontend
+
+jobs:
+    # ── Deploy Stage: Secure Cloud Config (Checkov + TFSec) ──
+    terraform-security:
+        runs-on: ubuntu-latest
+        if: ${{ github.event.workflow_run.conclusion == 'success' }}
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Checkov Terraform scan
+              uses: bridgecrewio/checkov-action@v12
+              with:
+                  directory: terraform/
+                  framework: terraform
+                  soft_fail: false
+
+            - name: TFSec Terraform scan
+              uses: aquasecurity/tfsec-action@v1.0.3
+              with:
+                  working_directory: terraform/
+                  soft_fail: false
+
+    deploy:
+        needs: [terraform-security]
+        runs-on: ubuntu-latest
+        if: ${{ github.event.workflow_run.conclusion == 'success' }}
+        environment: production
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Verify images exist in ECR
+              env:
+                  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  AWS_REGION: ${{ secrets.AWS_REGION }}
+              run: |
+                  IMAGE_TAG=${{ github.event.workflow_run.head_sha }}
+                  aws ecr describe-images \
+                    --repository-name $ECR_REPO_BACKEND \
+                    --image-ids imageTag=$IMAGE_TAG
+                  aws ecr describe-images \
+                    --repository-name $ECR_REPO_FRONTEND \
+                    --image-ids imageTag=$IMAGE_TAG
+
+            # ── Operate Stage: Fetch secrets from HashiCorp Vault ──
+            - name: Fetch secrets from Vault
+              uses: hashicorp/vault-action@v3
+              with:
+                  url: ${{ secrets.VAULT_ADDR }}
+                  method: approle
+                  roleId: ${{ secrets.VAULT_ROLE_ID }}
+                  secretId: ${{ secrets.VAULT_SECRET_ID }}
+                  secrets: |
+                      secret/data/cloudopshub/database DATABASE_URL ;
+                      secret/data/cloudopshub/argocd ARGOCD_AUTH_TOKEN
+
+            - name: Update GitOps manifests
+              run: |
+                  IMAGE_TAG=${{ github.event.workflow_run.head_sha }}
+                  sed -i "s|image:.*theepicbook-backend.*|image: $ECR_REGISTRY/$ECR_REPO_BACKEND:$IMAGE_TAG|" \
+                    gitops/base/docker-compose.yml
+                  sed -i "s|image:.*theepicbook-frontend.*|image: $ECR_REGISTRY/$ECR_REPO_FRONTEND:$IMAGE_TAG|" \
+                    gitops/base/docker-compose.yml
+
+            - name: Commit and push manifest update
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git add gitops/
+                  git commit -m "chore: update image to ${{ github.event.workflow_run.head_sha }}" || exit 0
+                  git push
+
+            - name: Trigger ArgoCD sync
+              run: |
+                  curl -sf -X POST "${{ secrets.ARGOCD_SERVER }}/api/v1/applications/theepicbook/sync" \
+                    -H "Authorization: Bearer ${{ env.ARGOCD_AUTH_TOKEN }}" \
+                    -H "Content-Type: application/json"
