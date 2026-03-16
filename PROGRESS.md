@@ -9,7 +9,7 @@
 - [x] Terraform modules: network, compute, storage, secrets, monitoring, load_balancer, wif
 - [x] GCP APIs enabled (compute, storage, secretmanager, iam, iamcredentials, sts, etc.)
 - [x] VPC, subnet, firewall rules, NAT, router
-- [x] GCE VM instance (e2-medium, COS image) with startup script
+- [x] GCE VM instance (e2-small, COS image) with startup script
 - [x] Load balancer (global HTTP LB with health check)
 - [x] Artifact Registry (Docker) for container images
 - [x] Static assets GCS bucket
@@ -17,7 +17,7 @@
 - [x] Monitoring: alert policies (CPU, DB, uptime), notification channel, uptime check, logging metric
 - [x] Workload Identity Federation (WIF) module for keyless GitHub Actions auth
 - [x] Terraform state bucket (GCS)
-- [x] **Infrastructure currently DESTROYED** — run `terraform apply` to recreate
+- [x] **Infrastructure LIVE** — `terraform apply` completed successfully
 
 ### B. Dockerization
 - [x] Backend Dockerfile: `theepicbook/Dockerfile`
@@ -42,11 +42,14 @@
 - [x] Full Terraform config with modules
 - [x] Multi-environment support (dev/staging/production tfvars)
 - [x] Deterministic naming — GitHub secrets survive destroy/apply cycles
+- [x] Migrated from expandox-project1 to expadox-lab (new GCP project)
 
-### E. GitOps with ArgoCD
-- [ ] Create `gitops/` directory structure (gitops/base/docker-compose.yml)
-- [ ] Install ArgoCD on VM
-- [ ] Configure ArgoCD to watch Git repo
+### E. GitOps (Lightweight Sync Agent — ArgoCD alternative for Docker VMs)
+- [x] Create `gitops/` directory structure (gitops/base/docker-compose.yml)
+- [x] Built GitOps sync agent (`gitops/scripts/gitops-sync.sh`) — polls Git, detects changes, auto-deploys
+- [x] Integrated sync agent into VM startup script (runs as Docker container)
+- [x] Removed Kubernetes-native ArgoCD manifests (not applicable to Docker Compose setup)
+- [x] Updated CD workflow — manifests commit triggers auto-sync within 60s
 
 ### F. Monitoring, Logging, and Alerts
 - [x] Prometheus + Grafana in VM startup script
@@ -56,38 +59,39 @@
 
 ## 🔲 Not Started / In Progress
 
-### GitHub Secrets to Add (do FIRST)
+### GitHub Secrets to Add
 | Secret | Value | Added? |
 |---|---|---|
-| `GCP_PROJECT_ID` | `expandox-project1` | ⬜ |
-| `GCP_REGION` | `us-central1` | ⬜ |
-| `GCP_SA_EMAIL` | `cloudopshub-app-dev@expandox-project1.iam.gserviceaccount.com` | ⬜ |
-| `GCP_WIF_PROVIDER` | `projects/663255337358/locations/global/workloadIdentityPools/cloudopshub-github-dev/providers/github-provider` | ⬜ |
-| `SNYK_TOKEN` | *(from snyk.io)* | ⬜ |
-| `SONAR_TOKEN` | *(from sonarcloud.io)* | ⬜ |
-| `SONAR_HOST_URL` | *(SonarQube/SonarCloud URL)* | ⬜ |
-| `VAULT_ADDR` | *(Vault server URL)* | ⬜ |
-| `VAULT_ROLE_ID` | *(from Vault)* | ⬜ |
-| `VAULT_SECRET_ID` | *(from Vault)* | ⬜ |
-| `ARGOCD_SERVER` | *(ArgoCD URL on VM)* | ⬜ |
+| `GCP_PROJECT_ID` | `expadox-lab` | ✅ |
+| `GCP_REGION` | `us-central1` | ✅ |
+| `GCP_SA_EMAIL` | `cloudopshub-app-dev@expadox-lab.iam.gserviceaccount.com` | ✅ |
+| `GCP_WIF_PROVIDER` | `projects/129303118923/locations/global/workloadIdentityPools/cloudopshub-github-dev/providers/github-provider` | ✅ |
+| `SNYK_TOKEN` | *(added)* | ✅ |
+| `SONAR_TOKEN` | *(added)* | ✅ |
+| `SONAR_HOST_URL` | `https://sonarcloud.io` | ✅ |
+| `VAULT_ADDR` | ~~removed — using GCP Secret Manager~~ | ✅ N/A |
+| `VAULT_ROLE_ID` | ~~removed — using GCP Secret Manager~~ | ✅ N/A |
+| `VAULT_SECRET_ID` | ~~removed — using GCP Secret Manager~~ | ✅ N/A |
+| `ARGOCD_SERVER` | ~~removed — GitOps sync agent polls Git directly~~ | ✅ N/A |
 
 ### Remaining Tasks (in order)
-1. ⬜ Add 4 GCP secrets to GitHub
-2. ⬜ Set up Snyk account → add SNYK_TOKEN
-3. ⬜ Set up SonarCloud/SonarQube → add SONAR_TOKEN, SONAR_HOST_URL
-4. ⬜ Create `gitops/` directory structure
-5. ⬜ `terraform apply` to recreate infrastructure
-6. ⬜ Install & configure HashiCorp Vault on VM → add VAULT secrets
-7. ⬜ Install & configure ArgoCD on VM → add ARGOCD_SERVER
-8. ⬜ Verify monitoring stack (Prometheus + Grafana) on VM
-9. ⬜ End-to-end test: push code → CI builds → CD deploys via ArgoCD
-10. ⬜ Set up staging environment
+1. ✅ Add 4 GCP secrets to GitHub
+2. ✅ Set up Snyk account → add SNYK_TOKEN
+3. ✅ Set up SonarCloud/SonarQube → add SONAR_TOKEN, SONAR_HOST_URL
+4. ✅ Create `gitops/` directory structure (already existed)
+5. ✅ Replaced Vault with GCP Secret Manager (already provisioned) — removed Vault from startup script, updated cd.yml, added argocd_token secret to Terraform
+6. ✅ Built GitOps sync agent (lightweight ArgoCD for Docker VMs) — runs on VM, polls Git, auto-deploys
+7. ✅ Restructured: Terraform = infra only, Git = single source of truth, GitOps agent deploys from Git
+8. 🔄 Push to main → CI builds images → CD updates manifests → GitOps agent auto-deploys (IN PROGRESS)
+9. ⬜ Set up staging environment
 
 ## 📝 Key Values (deterministic, survive destroy/apply)
-- **Project ID:** expandox-project1
-- **Project Number:** 663255337358
+- **Project ID:** expadox-lab
+- **Project Number:** 129303118923
 - **Region:** us-central1
-- **SA Email:** cloudopshub-app-dev@expandox-project1.iam.gserviceaccount.com
-- **WIF Provider:** projects/663255337358/locations/global/workloadIdentityPools/cloudopshub-github-dev/providers/github-provider
-- **Artifact Registry:** us-central1-docker.pkg.dev/expandox-project1/cloudopshub-docker
+- **SA Email:** cloudopshub-app-dev@expadox-lab.iam.gserviceaccount.com
+- **WIF Provider:** projects/129303118923/locations/global/workloadIdentityPools/cloudopshub-github-dev/providers/github-provider
+- **Artifact Registry:** us-central1-docker.pkg.dev/expadox-lab/cloudopshub-docker
+- **Load Balancer IP:** 136.110.184.234
+- **VM Internal IP:** 10.0.1.2
 - **GitHub Repo:** lakunzy7/CloudOpsHub

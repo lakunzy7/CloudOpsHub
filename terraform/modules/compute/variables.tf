@@ -7,3 +7,8 @@ variable "subnet_id" { type = string }
 variable "db_secret_name" { type = string }
 variable "grafana_secret_name" { type = string }
 variable "artifact_registry_url" { type = string }
+
+variable "github_repo" {
+  description = "GitHub repository (owner/repo) for GitOps sync"
+  type        = string
+}

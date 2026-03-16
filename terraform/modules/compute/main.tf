@@ -35,6 +35,9 @@ resource "google_compute_instance" "app_server" {
 
   network_interface {
     subnetwork = var.subnet_id
+    access_config {
+      # Ephemeral external IP for Vault/ArgoCD access
+    }
   }
 
   metadata_startup_script = templatefile("${path.module}/../../templates/startup.sh", {
@@ -44,6 +47,7 @@ resource "google_compute_instance" "app_server" {
     registry_host  = split("/", var.artifact_registry_url)[0]
     db_secret_name      = var.db_secret_name
     grafana_secret_name = var.grafana_secret_name
+    github_repo         = var.github_repo
   })
 
   metadata = {

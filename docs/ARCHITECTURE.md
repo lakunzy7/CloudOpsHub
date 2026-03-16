@@ -191,7 +191,7 @@ flowchart TD
 
 ```mermaid
 flowchart TB
-    subgraph GCP["GCP Project: expandox-project1"]
+    subgraph GCP["GCP Project: expadox-lab"]
         subgraph VPC["VPC Network"]
             subgraph PublicSubnet["Public Subnet"]
                 LB["Cloud Load Balancer\n+ Managed SSL\n+ Cloud Armor WAF"]

@@ -12,7 +12,7 @@ terraform {
   # your project: "<YOUR_PROJECT_ID>-cloudopshub-tf-state"
   # Or use: terraform init -backend-config="bucket=<YOUR_PROJECT_ID>-cloudopshub-tf-state"
   backend "gcs" {
-    bucket = "expandox-project1-cloudopshub-tf-state"
+    bucket = "expadox-lab-cloudopshub-tf-state"
     prefix = "terraform/state"
   }
 }
@@ -85,6 +85,7 @@ module "compute" {
   db_secret_name            = module.secrets.database_url_secret_id
   grafana_secret_name       = module.secrets.grafana_password_secret_id
   artifact_registry_url     = module.storage.artifact_registry_url
+  github_repo               = var.github_repo
 
   depends_on = [google_project_service.apis]
 }

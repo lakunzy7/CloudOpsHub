@@ -45,7 +45,7 @@ aws --version          # Should show aws-cli version
 
 ### Accounts you need
 
-- **Google Cloud** account with a project (ours is `expandox-project1`)
+- **Google Cloud** account with a project (ours is `expadox-lab`)
 - **AWS** account (for ECR container registry)
 - **GitHub** account with access to this repo
 - **Snyk** account (free tier works) for security scanning
@@ -268,7 +268,7 @@ Use this for first-time setup or debugging:
 
 ```bash
 # 1. SSH into your GCP server
-gcloud compute ssh <instance-name> --zone=<zone> --project=expandox-project1
+gcloud compute ssh <instance-name> --zone=<zone> --project=expadox-lab
 
 # 2. On the server, set your environment variables
 export DATABASE_URL="mysql://appuser:PASSWORD@CLOUD_SQL_IP:3306/bookstore"
@@ -389,13 +389,13 @@ terraform destroy -var-file=envs/dev.tfvars
 
 ```bash
 # List your VMs
-gcloud compute instances list --project=expandox-project1
+gcloud compute instances list --project=expadox-lab
 
 # SSH into a VM
-gcloud compute ssh <instance-name> --zone=<zone> --project=expandox-project1
+gcloud compute ssh <instance-name> --zone=<zone> --project=expadox-lab
 
 # View Cloud SQL instances
-gcloud sql instances list --project=expandox-project1
+gcloud sql instances list --project=expadox-lab
 ```
 
 ### GitOps (environment-specific deploys)

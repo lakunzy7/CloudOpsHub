@@ -57,17 +57,14 @@ jobs:
                   gcloud artifacts docker images describe \
                     $REGISTRY/theepicbook-database:$IMAGE_TAG
 
-            # ── Operate Stage: Fetch secrets from HashiCorp Vault ──
-            - name: Fetch secrets from Vault
-              uses: hashicorp/vault-action@v3
-              with:
-                  url: ${{ secrets.VAULT_ADDR }}
-                  method: approle
-                  roleId: ${{ secrets.VAULT_ROLE_ID }}
-                  secretId: ${{ secrets.VAULT_SECRET_ID }}
-                  secrets: |
-                      secret/data/cloudopshub/database DATABASE_URL ;
-                      secret/data/cloudopshub/argocd ARGOCD_AUTH_TOKEN
+            # ── Operate Stage: Fetch secrets from GCP Secret Manager ──
+            - name: Fetch secrets from GCP Secret Manager
+              run: |
+                  DATABASE_URL=$(gcloud secrets versions access latest \
+                    --secret="cloudopshub-database-url-dev" \
+                    --project=${{ secrets.GCP_PROJECT_ID }})
+                  echo "::add-mask::$DATABASE_URL"
+                  echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_ENV
 
             - name: Update GitOps manifests
               run: |
@@ -87,8 +84,10 @@ jobs:
                   git commit -m "chore: update image to ${{ github.event.workflow_run.head_sha }}" || exit 0
                   git push
 
-            - name: Trigger ArgoCD sync
+            # GitOps sync agent on VM auto-detects the manifest commit
+            # and redeploys within 60 seconds — no manual trigger needed
+            - name: GitOps sync notification
               run: |
-                  curl -sf -X POST "${{ secrets.ARGOCD_SERVER }}/api/v1/applications/theepicbook/sync" \
-                    -H "Authorization: Bearer ${{ env.ARGOCD_AUTH_TOKEN }}" \
-                    -H "Content-Type: application/json"
+                  echo "✅ GitOps manifests updated and pushed."
+                  echo "The GitOps sync agent on the VM will detect this change"
+                  echo "and auto-deploy within 60 seconds."

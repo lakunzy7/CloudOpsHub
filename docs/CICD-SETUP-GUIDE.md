@@ -63,12 +63,12 @@ This service account lets GitHub Actions push Docker images to Artifact Registry
 ### Step 1: Open Google Cloud Console
 
 1. Go to https://console.cloud.google.com
-2. Make sure you're in your project (top-left dropdown). Your project is `expandox-project1`.
+2. Make sure you're in your project (top-left dropdown). Your project is `expadox-lab`.
 
 ### Step 2: Create a Service Account
 
 1. In the left sidebar, go to **IAM & Admin > Service Accounts**
-   - Direct URL: https://console.cloud.google.com/iam-admin/serviceaccounts?project=expandox-project1
+   - Direct URL: https://console.cloud.google.com/iam-admin/serviceaccounts?project=expadox-lab
 2. Click **+ CREATE SERVICE ACCOUNT** at the top
 3. Fill in the details:
    - **Service account name**: `github-actions-cicd`
@@ -91,7 +91,7 @@ Click **CONTINUE**, then **DONE**.
 
 ### Step 4: Create a JSON Key
 
-1. Find your new service account `github-actions-cicd@expandox-project1.iam.gserviceaccount.com` in the list
+1. Find your new service account `github-actions-cicd@expadox-lab.iam.gserviceaccount.com` in the list
 2. Click on it to open its details
 3. Go to the **KEYS** tab
 4. Click **ADD KEY > Create new key**
@@ -107,24 +107,24 @@ If you prefer the command line:
 # Create the service account
 gcloud iam service-accounts create github-actions-cicd \
   --display-name="GitHub Actions CI/CD" \
-  --project=expandox-project1
+  --project=expadox-lab
 
 # Assign roles
-gcloud projects add-iam-policy-binding expandox-project1 \
-  --member="serviceAccount:github-actions-cicd@expandox-project1.iam.gserviceaccount.com" \
+gcloud projects add-iam-policy-binding expadox-lab \
+  --member="serviceAccount:github-actions-cicd@expadox-lab.iam.gserviceaccount.com" \
   --role="roles/artifactregistry.writer"
 
-gcloud projects add-iam-policy-binding expandox-project1 \
-  --member="serviceAccount:github-actions-cicd@expandox-project1.iam.gserviceaccount.com" \
+gcloud projects add-iam-policy-binding expadox-lab \
+  --member="serviceAccount:github-actions-cicd@expadox-lab.iam.gserviceaccount.com" \
   --role="roles/artifactregistry.reader"
 
-gcloud projects add-iam-policy-binding expandox-project1 \
-  --member="serviceAccount:github-actions-cicd@expandox-project1.iam.gserviceaccount.com" \
+gcloud projects add-iam-policy-binding expadox-lab \
+  --member="serviceAccount:github-actions-cicd@expadox-lab.iam.gserviceaccount.com" \
   --role="roles/storage.objectViewer"
 
 # Generate the JSON key file
 gcloud iam service-accounts keys create ~/gcp-sa-key.json \
-  --iam-account=github-actions-cicd@expandox-project1.iam.gserviceaccount.com
+  --iam-account=github-actions-cicd@expadox-lab.iam.gserviceaccount.com
 
 # View the key (you'll copy this into GitHub)
 cat ~/gcp-sa-key.json
@@ -134,7 +134,7 @@ cat ~/gcp-sa-key.json
 
 | Secret | Value |
 |---|---|
-| `GCP_PROJECT_ID` | `expandox-project1` |
+| `GCP_PROJECT_ID` | `expadox-lab` |
 | `GCP_REGION` | `us-central1` |
 | `GCP_SA_KEY` | Entire contents of the downloaded `.json` key file |
 
@@ -360,7 +360,7 @@ SSH into your VM:
 
 ```bash
 # SSH via gcloud
-gcloud compute ssh cloudopshub-app-dev --zone=us-central1-a --project=expandox-project1
+gcloud compute ssh cloudopshub-app-dev --zone=us-central1-a --project=expadox-lab
 ```
 
 Install ArgoCD as a Docker container:
@@ -502,7 +502,7 @@ Add these one at a time. For each, enter the **Name** and **Secret** value, then
 
 | # | Name | Value |
 |---|---|---|
-| 1 | `GCP_PROJECT_ID` | `expandox-project1` |
+| 1 | `GCP_PROJECT_ID` | `expadox-lab` |
 | 2 | `GCP_REGION` | `us-central1` |
 | 3 | `GCP_SA_KEY` | Paste the entire JSON key file contents |
 | 4 | `SNYK_TOKEN` | Your Snyk API token |
@@ -522,7 +522,7 @@ If you have the GitHub CLI installed:
 gh auth login
 
 # Set each secret
-gh secret set GCP_PROJECT_ID --body "expandox-project1"
+gh secret set GCP_PROJECT_ID --body "expadox-lab"
 gh secret set GCP_REGION --body "us-central1"
 gh secret set GCP_SA_KEY < ~/gcp-sa-key.json
 gh secret set SNYK_TOKEN --body "your-snyk-token"
@@ -572,7 +572,7 @@ The CD pipeline triggers automatically after CI completes successfully on `main`
 ```bash
 # List images in Artifact Registry
 gcloud artifacts docker images list \
-  us-central1-docker.pkg.dev/expandox-project1/cloudopshub-docker
+  us-central1-docker.pkg.dev/expadox-lab/cloudopshub-docker
 ```
 
 ---
@@ -585,7 +585,7 @@ gcloud artifacts docker images list \
 - Verify `GCP_PROJECT_ID` and `GCP_REGION` are correct
 - Check the Artifact Registry repo exists:
   ```bash
-  gcloud artifacts repositories list --project=expandox-project1 --location=us-central1
+  gcloud artifacts repositories list --project=expadox-lab --location=us-central1
   ```
 
 ### Snyk fails with "Authentication failed"
@@ -629,7 +629,7 @@ gcloud artifacts docker images list \
 - Verify with:
   ```bash
   gcloud artifacts docker images list \
-    us-central1-docker.pkg.dev/expandox-project1/cloudopshub-docker \
+    us-central1-docker.pkg.dev/expadox-lab/cloudopshub-docker \
     --include-tags
   ```
 
@@ -658,9 +658,9 @@ gcloud artifacts docker images list \
 |---|---|
 | GitHub Actions | https://github.com/lakunzy7/CloudOpsHub/actions |
 | GitHub Secrets | https://github.com/lakunzy7/CloudOpsHub/settings/secrets/actions |
-| GCP Console | https://console.cloud.google.com/?project=expandox-project1 |
-| GCP Service Accounts | https://console.cloud.google.com/iam-admin/serviceaccounts?project=expandox-project1 |
-| Artifact Registry | https://console.cloud.google.com/artifacts?project=expandox-project1 |
+| GCP Console | https://console.cloud.google.com/?project=expadox-lab |
+| GCP Service Accounts | https://console.cloud.google.com/iam-admin/serviceaccounts?project=expadox-lab |
+| Artifact Registry | https://console.cloud.google.com/artifacts?project=expadox-lab |
 | Snyk Dashboard | https://app.snyk.io |
 | SonarCloud | https://sonarcloud.io |
 | HCP Vault | https://portal.cloud.hashicorp.com |

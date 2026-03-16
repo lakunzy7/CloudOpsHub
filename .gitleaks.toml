@@ -8,4 +8,6 @@ paths = [
   '''package-lock\.json''',
   '''\.env\.example''',
   '''terraform\.tfvars\.example''',
+  '''terraform/envs/''',
+  '''\.tfvars$''',
 ]

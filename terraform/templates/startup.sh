@@ -1,315 +1,204 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "=== CloudOpsHub VM Startup - ${environment} ==="
+# ═══════════════════════════════════════════════════════════════════
+# CloudOpsHub VM Bootstrap — ${environment}
+# ═══════════════════════════════════════════════════════════════════
+# This script ONLY bootstraps the VM. It does NOT deploy the app,
+# configure monitoring, or manage services. That's the GitOps
+# agent's job — Git is our single source of truth.
+#
+# Responsibilities:
+#   1. Install Docker Compose
+#   2. Authenticate to Artifact Registry
+#   3. Fetch secrets from GCP Secret Manager
+#   4. Write .env file for Docker Compose
+#   5. Clone repo & start GitOps sync agent
+#
+# Everything else (app, monitoring, config) is managed via Git
+# in gitops/base/docker-compose.yml and monitoring/ configs.
+# ═══════════════════════════════════════════════════════════════════
 
-# ── Install Docker Compose ──
-if ! command -v docker-compose &> /dev/null; then
+echo "=== CloudOpsHub VM Bootstrap - ${environment} ==="
+
+# ── 1. Install Docker Compose (COS: /usr is read-only) ──
+COMPOSE_BIN="/var/lib/toolbox/docker-compose"
+if [ ! -f "$COMPOSE_BIN" ]; then
   echo "Installing Docker Compose..."
   DOCKER_COMPOSE_VERSION="v2.24.0"
-  mkdir -p /usr/local/bin
+  mkdir -p /var/lib/toolbox
   curl -SL "https://github.com/docker/compose/releases/download/$${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64" \
-    -o /usr/local/bin/docker-compose
-  chmod +x /usr/local/bin/docker-compose
+    -o "$COMPOSE_BIN"
+  chmod +x "$COMPOSE_BIN"
 fi
+export PATH="/var/lib/toolbox:$PATH"
 
-# ── Fetch secrets from Secret Manager ──
+# ── Helper: parse JSON field (COS has no jq) ──
+json_field() {
+  python3 -c "import sys,json;print(json.load(sys.stdin)['$1'])"
+}
+
+# ── 2. Authenticate to Artifact Registry ──
+echo "Authenticating to Artifact Registry..."
+ACCESS_TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" | json_field access_token)
+
+export HOME=/var/lib
+mkdir -p /var/lib/.docker
+echo "$ACCESS_TOKEN" | docker login -u oauth2accesstoken --password-stdin https://${registry_host}
+
+# ── 3. Fetch secrets from GCP Secret Manager ──
 echo "Fetching secrets from GCP Secret Manager..."
-DATABASE_URL=$(gcloud secrets versions access latest --secret="${db_secret_name}" --project="${project_id}")
-export DATABASE_URL
-GRAFANA_PASSWORD=$(gcloud secrets versions access latest --secret="${grafana_secret_name}" --project="${project_id}")
-export GRAFANA_PASSWORD
+DATABASE_URL=$(curl -sf \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/${db_secret_name}/versions/latest:access" | \
+  python3 -c "import sys,json,base64;print(base64.b64decode(json.load(sys.stdin)['payload']['data']).decode())")
 
-# ── Login to Artifact Registry ──
-echo "Logging into Artifact Registry..."
-gcloud auth configure-docker ${registry_host} --quiet
+GRAFANA_PASSWORD=$(curl -sf \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/${grafana_secret_name}/versions/latest:access" | \
+  python3 -c "import sys,json,base64;print(base64.b64decode(json.load(sys.stdin)['payload']['data']).decode())")
 
-# ── Set up application directory ──
-APP_DIR="/opt/theepicbook"
-mkdir -p "$APP_DIR"
-cd "$APP_DIR"
+# ── 4. Write .env file (consumed by docker-compose from Git) ──
+echo "Writing environment file..."
+ENV_DIR="/var/lib/cloudopshub"
+mkdir -p "$ENV_DIR"
 
-# ── Write environment file ──
-cat > .env <<ENVEOF
+cat > "$ENV_DIR/.env" <<ENVEOF
 DATABASE_URL=$DATABASE_URL
 REGISTRY=${registry_url}
 NODE_ENV=${environment}
 PORT=8080
 GRAFANA_PASSWORD=$GRAFANA_PASSWORD
+DB_ROOT_PASSWORD=$DATABASE_URL
+DB_PASSWORD=$DATABASE_URL
 ENVEOF
-chmod 600 .env
+chmod 600 "$ENV_DIR/.env"
 
-# ── Write docker-compose for microservices ──
-cat > docker-compose.yml <<COMPOSEEOF
-version: "3.8"
+# ── 5. Clone repo & start GitOps sync agent ──
+echo "Setting up GitOps sync agent..."
+GITOPS_DIR="/var/lib/gitops"
+mkdir -p "$GITOPS_DIR"
 
-# Microservices:
-# 1. Frontend (nginx)  - static assets + reverse proxy
-# 2. Backend  (node)   - Express API + SSR
-# 3. Database (mysql)  - Dockerized MySQL
+cat > "$GITOPS_DIR/gitops-sync.sh" <<'GSEOF'
+#!/bin/bash
+set -euo pipefail
 
-services:
-  frontend:
-    image: ${registry_url}/theepicbook-frontend:latest
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
-    networks:
-      - app-network
+REPO_URL="$${GITOPS_REPO_URL}"
+BRANCH="$${GITOPS_BRANCH:-main}"
+ENVIRONMENT="$${GITOPS_ENVIRONMENT:-dev}"
+SYNC_INTERVAL="$${GITOPS_SYNC_INTERVAL:-60}"
+REPO_DIR="/var/lib/gitops/repo"
+STATE_FILE="/var/lib/gitops/last-synced-sha"
+COMPOSE_BIN="$${COMPOSE_BIN:-/var/lib/toolbox/docker-compose}"
+ENV_FILE="/var/lib/cloudopshub/.env"
+LOG_PREFIX="[gitops-sync]"
 
-  backend:
-    image: ${registry_url}/theepicbook-backend:latest
-    restart: unless-stopped
-    environment:
-      - PORT=8080
-      - DATABASE_URL=$${DATABASE_URL}
-    depends_on:
-      database:
-        condition: service_healthy
-    networks:
-      - app-network
+log() { echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') $LOG_PREFIX $*"; }
 
-  database:
-    image: ${registry_url}/theepicbook-database:latest
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: $${DATABASE_URL##*:\/\/*:}
-      MYSQL_DATABASE: bookstore
-      MYSQL_USER: appuser
-      MYSQL_PASSWORD: $${DATABASE_URL##*:\/\/*:}
-    volumes:
-      - db-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app-network
+# Initial clone
+if [ ! -d "$REPO_DIR/.git" ]; then
+  log "Cloning $REPO_URL (branch: $BRANCH)..."
+  mkdir -p "$(dirname "$REPO_DIR")"
+  git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"
+fi
 
-volumes:
-  db-data:
+mkdir -p "$(dirname "$STATE_FILE")"
+log "GitOps sync started (interval: $${SYNC_INTERVAL}s, env: $ENVIRONMENT)"
+log "Source of truth: $REPO_URL (branch: $BRANCH)"
 
-networks:
-  app-network:
-    driver: bridge
-COMPOSEEOF
+deploy() {
+  cd "$REPO_DIR"
 
-# ── Pull and start application ──
-echo "Pulling latest images..."
-docker-compose pull
+  # App stack from gitops/
+  COMPOSE_BASE="gitops/base/docker-compose.yml"
+  COMPOSE_OVERRIDE="gitops/overlays/$ENVIRONMENT/docker-compose.override.yml"
+  COMPOSE_CMD="$COMPOSE_BIN --env-file $ENV_FILE -f $COMPOSE_BASE"
+  [ -f "$COMPOSE_OVERRIDE" ] && COMPOSE_CMD="$COMPOSE_CMD -f $COMPOSE_OVERRIDE"
 
-echo "Starting microservices..."
-docker-compose up -d --remove-orphans
-
-# ── Set up monitoring stack ──
-MONITOR_DIR="/opt/monitoring"
-mkdir -p "$MONITOR_DIR/prometheus" "$MONITOR_DIR/grafana/provisioning/datasources" "$MONITOR_DIR/grafana/provisioning/dashboards" "$MONITOR_DIR/grafana/dashboards" "$MONITOR_DIR/alertmanager"
-
-# ── Prometheus config ──
-cat > "$MONITOR_DIR/prometheus/prometheus.yml" <<'PROMEOF'
-global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-
-rule_files:
-  - alerts.yml
-
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets:
-            - alertmanager:9093
-
-scrape_configs:
-  - job_name: prometheus
-    static_configs:
-      - targets: ["localhost:9090"]
-
-  - job_name: node-exporter
-    static_configs:
-      - targets: ["node-exporter:9100"]
-
-  - job_name: theepicbook-backend
-    metrics_path: /metrics
-    static_configs:
-      - targets: ["backend:8080"]
-PROMEOF
-
-# ── Prometheus alert rules ──
-cat > "$MONITOR_DIR/prometheus/alerts.yml" <<'ALERTEOF'
-groups:
-  - name: container_alerts
-    rules:
-      - alert: ContainerDown
-        expr: up == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Container {{ $labels.instance }} is down"
-          description: "{{ $labels.job }} has been down for more than 1 minute."
-
-      - alert: HighCpuUsage
-        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High CPU usage on {{ $labels.instance }}"
-          description: "CPU usage is above 80% for more than 5 minutes."
-
-      - alert: HighMemoryUsage
-        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High memory usage on {{ $labels.instance }}"
-          description: "Memory usage is above 85% for more than 5 minutes."
-
-      - alert: DiskSpaceLow
-        expr: (1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})) * 100 > 90
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Disk space low on {{ $labels.instance }}"
-          description: "Disk usage is above 90%."
-ALERTEOF
-
-# ── Alertmanager config ──
-cat > "$MONITOR_DIR/alertmanager/alertmanager.yml" <<'AMEOF'
-global:
-  resolve_timeout: 5m
-
-route:
-  group_by: ["alertname", "severity"]
-  group_wait: 10s
-  group_interval: 10s
-  repeat_interval: 1h
-  receiver: default
-
-receivers:
-  - name: default
-    webhook_configs:
-      - url: "http://backend:8080/alerts"
-        send_resolved: true
-AMEOF
-
-# ── Grafana provisioning ──
-cat > "$MONITOR_DIR/grafana/provisioning/datasources/datasources.yml" <<'DSEOF'
-apiVersion: 1
-
-datasources:
-  - name: Prometheus
-    type: prometheus
-    access: proxy
-    url: http://prometheus:9090
-    isDefault: true
-    editable: false
-DSEOF
-
-cat > "$MONITOR_DIR/grafana/provisioning/dashboards/dashboards.yml" <<'DBEOF'
-apiVersion: 1
-
-providers:
-  - name: Default
-    orgId: 1
-    folder: ""
-    type: file
-    disableDeletion: false
-    editable: true
-    options:
-      path: /var/lib/grafana/dashboards
-      foldersFromFilesStructure: false
-DBEOF
-
-# ── Grafana dashboard (inline JSON) ──
-cat > "$MONITOR_DIR/grafana/dashboards/app-dashboard.json" <<'DASHEOF'
-{"annotations":{"list":[]},"editable":true,"fiscalYearStartMonth":0,"graphTooltip":0,"id":null,"links":[],"panels":[{"title":"Container Up/Down","type":"stat","gridPos":{"h":4,"w":6,"x":0,"y":0},"targets":[{"expr":"up{job=\"theepicbook\"}","legendFormat":"App"}],"fieldConfig":{"defaults":{"mappings":[{"options":{"0":{"text":"DOWN","color":"red"},"1":{"text":"UP","color":"green"}},"type":"value"}]}}},{"title":"CPU Usage %","type":"timeseries","gridPos":{"h":8,"w":12,"x":0,"y":4},"targets":[{"expr":"100 - (avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)","legendFormat":"{{ instance }}"}]},{"title":"Memory Usage %","type":"timeseries","gridPos":{"h":8,"w":12,"x":12,"y":4},"targets":[{"expr":"(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100","legendFormat":"{{ instance }}"}]},{"title":"Disk Usage %","type":"gauge","gridPos":{"h":4,"w":6,"x":6,"y":0},"targets":[{"expr":"(1 - (node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})) * 100","legendFormat":"{{ instance }}"}],"fieldConfig":{"defaults":{"max":100,"thresholds":{"steps":[{"color":"green","value":null},{"color":"yellow","value":70},{"color":"red","value":90}]}}}}],"schemaVersion":38,"tags":["cloudopshub","theepicbook"],"templating":{"list":[]},"time":{"from":"now-1h","to":"now"},"title":"TheEpicBook Application Dashboard","uid":"theepicbook-app"}
-DASHEOF
-
-# ── Monitoring docker-compose ──
-cat > "$MONITOR_DIR/docker-compose.yml" <<'MONEOF'
-version: "3.8"
-
-services:
-  prometheus:
-    image: prom/prometheus:v2.48.0
-    restart: unless-stopped
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml
-      - prometheus-data:/prometheus
-    ports:
-      - "9090:9090"
-    networks:
-      - monitoring
-      - theepicbook_app-network
-
-  grafana:
-    image: grafana/grafana:10.2.0
-    restart: unless-stopped
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=$${GRAFANA_PASSWORD}
-    volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
-      - grafana-data:/var/lib/grafana
-    ports:
-      - "3000:3000"
-    depends_on:
-      - prometheus
-    networks:
-      - monitoring
-
-  node-exporter:
-    image: prom/node-exporter:v1.7.0
-    restart: unless-stopped
-    ports:
-      - "9100:9100"
-    networks:
-      - monitoring
-
-  alertmanager:
-    image: prom/alertmanager:v0.26.0
-    restart: unless-stopped
-    volumes:
-      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
-    ports:
-      - "9093:9093"
-    networks:
-      - monitoring
-
-volumes:
-  prometheus-data:
-  grafana-data:
-
-networks:
-  monitoring:
-    driver: bridge
-  theepicbook_app-network:
-    external: true
-MONEOF
-
-# ── Start monitoring stack ──
-echo "Starting monitoring stack..."
-cd "$MONITOR_DIR"
-docker-compose --env-file /opt/theepicbook/.env up -d --remove-orphans
-
-# ── Health check ──
-echo "Waiting for application to be healthy..."
-cd "$APP_DIR"
-for i in $(seq 1 30); do
-  if curl -sf http://localhost:80/ > /dev/null 2>&1; then
-    echo "All services healthy!"
-    exit 0
+  log "Pulling app images..."
+  if ! $COMPOSE_CMD pull 2>&1; then
+    log "WARNING: App image pull failed (may not be in registry yet)"
+    return 1
   fi
-  sleep 5
-done
 
-echo "WARNING: Application did not become healthy within timeout"
-exit 1
+  log "Deploying full stack (app + monitoring)..."
+  $COMPOSE_CMD up -d --remove-orphans 2>&1
+
+  return 0
+}
+
+# First deploy attempt
+log "Running initial deployment..."
+deploy || log "Initial deploy incomplete — will retry on next cycle"
+
+# Sync loop
+while true; do
+  cd "$REPO_DIR"
+
+  if ! git fetch origin "$BRANCH" --depth 1 2>/dev/null; then
+    log "WARNING: git fetch failed, retrying next cycle"
+    sleep "$SYNC_INTERVAL"
+    continue
+  fi
+
+  REMOTE_SHA=$(git rev-parse "origin/$BRANCH")
+  LOCAL_SHA=$(cat "$STATE_FILE" 2>/dev/null || echo "none")
+
+  if [ "$REMOTE_SHA" = "$LOCAL_SHA" ]; then
+    sleep "$SYNC_INTERVAL"
+    continue
+  fi
+
+  log "Change detected: $${LOCAL_SHA:0:8} -> $${REMOTE_SHA:0:8}"
+
+  # Check if relevant files changed
+  if [ "$LOCAL_SHA" != "none" ]; then
+    CHANGED=$(git diff --name-only "$LOCAL_SHA" "$REMOTE_SHA" -- gitops/ monitoring/ 2>/dev/null || echo "gitops/")
+  else
+    CHANGED="gitops/"
+  fi
+
+  if [ -z "$CHANGED" ]; then
+    log "No gitops/monitoring changes, updating SHA only"
+    echo "$REMOTE_SHA" > "$STATE_FILE"
+    sleep "$SYNC_INTERVAL"
+    continue
+  fi
+
+  log "Files changed — redeploying..."
+  git reset --hard "origin/$BRANCH"
+
+  if deploy; then
+    log "Sync successful ($REMOTE_SHA)"
+    echo "$REMOTE_SHA" > "$STATE_FILE"
+  else
+    log "Deploy failed, will retry next cycle"
+  fi
+
+  sleep "$SYNC_INTERVAL"
+done
+GSEOF
+chmod +x "$GITOPS_DIR/gitops-sync.sh"
+
+# Start GitOps sync agent as a Docker container
+echo "Starting GitOps sync agent..."
+docker run -d \
+  --name gitops-sync \
+  --restart unless-stopped \
+  --entrypoint "" \
+  -e GITOPS_REPO_URL="https://github.com/${github_repo}.git" \
+  -e GITOPS_BRANCH="main" \
+  -e GITOPS_ENVIRONMENT="${environment}" \
+  -e GITOPS_SYNC_INTERVAL="60" \
+  -e COMPOSE_BIN="/var/lib/toolbox/docker-compose" \
+  -v "$GITOPS_DIR:/var/lib/gitops" \
+  -v "$ENV_DIR/.env:/var/lib/cloudopshub/.env:ro" \
+  -v /var/lib/toolbox/docker-compose:/var/lib/toolbox/docker-compose:ro \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  alpine/git:latest \
+  sh -c 'apk add --no-cache bash curl docker-cli >/dev/null 2>&1 && bash /var/lib/gitops/gitops-sync.sh'
+
+echo "=== Bootstrap complete ==="
+echo "The GitOps agent will now manage all deployments from Git."
+echo "Git is the single source of truth."
