@@ -68,6 +68,18 @@ variable "alert_email" {
   type        = string
 }
 
+# ── GitHub CI/CD ──
+variable "github_repo" {
+  description = "GitHub repository in owner/repo format for WIF"
+  type        = string
+  default     = "lakunzy7/CloudOpsHub"
+}
+
+variable "project_number" {
+  description = "GCP project number"
+  type        = string
+}
+
 # ── Static assets CORS ──
 variable "allowed_origins" {
   description = "Allowed CORS origins for static assets bucket"

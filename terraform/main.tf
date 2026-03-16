@@ -34,6 +34,9 @@ resource "google_project_service" "apis" {
     "logging.googleapis.com",
     "dns.googleapis.com",
     "artifactregistry.googleapis.com",
+    "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
+    "sts.googleapis.com",
   ])
 
   project                    = var.project_id
@@ -108,6 +111,20 @@ module "storage" {
   environment     = var.environment
   region          = var.region
   allowed_origins = var.allowed_origins
+
+  depends_on = [google_project_service.apis]
+}
+
+# ── Module: Workload Identity Federation ──
+module "wif" {
+  source = "./modules/wif"
+
+  project_id            = var.project_id
+  project_number        = var.project_number
+  project_name          = var.project_name
+  environment           = var.environment
+  github_repo           = var.github_repo
+  service_account_email = module.compute.service_account_email
 
   depends_on = [google_project_service.apis]
 }

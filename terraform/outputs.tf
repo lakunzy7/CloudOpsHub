@@ -37,6 +37,12 @@ output "static_assets_bucket" {
   value       = module.storage.static_assets_url
 }
 
+# ── Workload Identity Federation ──
+output "wif_provider" {
+  description = "WIF provider for GitHub Actions (use as GCP_WIF_PROVIDER secret)"
+  value       = module.wif.workload_identity_provider
+}
+
 output "artifact_registry_url" {
   description = "GCP Artifact Registry URL"
   value       = module.storage.artifact_registry_url
