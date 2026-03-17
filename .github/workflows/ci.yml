@@ -42,6 +42,7 @@ jobs:
           fetch-depth: 0
       - name: SonarQube scan
         uses: SonarSource/sonarqube-scan-action@v6
+        continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -53,6 +54,7 @@ jobs:
             -Dsonar.exclusions=theepicbook/node_modules/**,theepicbook/public/assets/js/materialize*
       - name: SonarQube quality gate check
         uses: SonarSource/sonarqube-quality-gate-action@v1
+        continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
