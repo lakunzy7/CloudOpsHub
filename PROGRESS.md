@@ -18,6 +18,7 @@
 - [x] Workload Identity Federation (WIF) module for keyless GitHub Actions auth
 - [x] Terraform state bucket (GCS)
 - [x] **Infrastructure LIVE** — `terraform apply` completed successfully
+- [x] **Load Balancer IP:** `34.54.161.113` (updated after rebuild)
 
 ### B. Dockerization
 - [x] Backend Dockerfile: `theepicbook/Dockerfile`
@@ -82,7 +83,7 @@
 5. ✅ Replaced Vault with GCP Secret Manager (already provisioned) — removed Vault from startup script, updated cd.yml, added argocd_token secret to Terraform
 6. ✅ Built GitOps sync agent (lightweight ArgoCD for Docker VMs) — runs on VM, polls Git, auto-deploys
 7. ✅ Restructured: Terraform = infra only, Git = single source of truth, GitOps agent deploys from Git
-8. 🔄 Push to main → CI builds images → CD updates manifests → GitOps agent auto-deploys (IN PROGRESS)
+8. ✅ Push to main → CI builds images → CD updates manifests → GitOps agent auto-deploys
 9. ⬜ Set up staging environment
 
 ## 📝 Key Values (deterministic, survive destroy/apply)
@@ -92,6 +93,6 @@
 - **SA Email:** cloudopshub-app-dev@expadox-lab.iam.gserviceaccount.com
 - **WIF Provider:** projects/129303118923/locations/global/workloadIdentityPools/cloudopshub-github-dev/providers/github-provider
 - **Artifact Registry:** us-central1-docker.pkg.dev/expadox-lab/cloudopshub-docker
-- **Load Balancer IP:** 136.110.184.234
+- **Load Balancer IP:** 34.54.161.113
 - **VM Internal IP:** 10.0.1.2
 - **GitHub Repo:** lakunzy7/CloudOpsHub
