@@ -3,8 +3,8 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## ⚡ Project Progress
-**ALWAYS read `PROGRESS.md` first** to see where we left off. Resume from the next uncompleted task.
-Current status: Infrastructure destroyed. Next step → Add 4 GCP GitHub secrets, then continue with remaining tasks.
+**ALWAYS read `docs/PROGRESS.md` first** to see where we left off. Resume from the next uncompleted task.
+Current status: Dev environment live. CI/CD pipeline working end-to-end. Next step → staging environment.
 
 ## Project Overview
 
@@ -33,7 +33,7 @@ npm run lint         # ESLint check
 - **config/config.json** - Sequelize DB config per environment (development/test/production)
 - **db/** - SQL seed files and CSVs for books/authors
 
-Database: MySQL via Sequelize ORM. Production uses `JAWSDB_URL` env variable.
+Database: MySQL via Sequelize ORM. Production uses `DATABASE_URL` env variable.
 
 ## Code Style
 
@@ -41,4 +41,4 @@ ESLint enforces: 2-space indent, double quotes, semicolons required, camelCase, 
 
 ## Infrastructure Context
 
-The broader project (described in `Project.md`) involves Docker containerization, Terraform IaC, CI/CD pipelines, and ArgoCD/Flux GitOps across dev/staging/production environments. Travis CI is configured for linting.
+The broader project (described in `docs/project.md`) involves Docker containerization, Terraform IaC, GitHub Actions CI/CD, and a lightweight GitOps sync agent across dev/staging/production environments on GCP.
