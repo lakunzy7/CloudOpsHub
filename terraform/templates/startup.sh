@@ -196,8 +196,23 @@ docker run -d \
   -v "$ENV_DIR/.env:/var/lib/cloudopshub/.env:ro" \
   -v /var/lib/toolbox/docker-compose:/var/lib/toolbox/docker-compose:ro \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /var/lib/.docker/config.json:/root/.docker/config.json:ro \
   alpine/git:latest \
   sh -c 'apk add --no-cache bash curl docker-cli >/dev/null 2>&1 && bash /var/lib/gitops/gitops-sync.sh'
+
+# ── 6. Token refresh loop (runs on host, refreshes every 45 min) ──
+echo "Starting Artifact Registry token refresh loop..."
+nohup bash -c '
+while true; do
+  sleep 2700  # 45 minutes
+  TOKEN=$(curl -sf -H "Metadata-Flavor: Google" \
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" | \
+    python3 -c "import sys,json;print(json.load(sys.stdin)[\"access_token\"])")
+  if [ -n "$TOKEN" ]; then
+    echo "$TOKEN" | docker login -u oauth2accesstoken --password-stdin https://us-central1-docker.pkg.dev >/dev/null 2>&1
+  fi
+done
+' &
 
 echo "=== Bootstrap complete ==="
 echo "The GitOps agent will now manage all deployments from Git."

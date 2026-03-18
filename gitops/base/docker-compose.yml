@@ -51,60 +51,12 @@ services:
     networks:
       - app-network
 
-  prometheus:
-    image: prom/prometheus:v2.48.0
-    restart: unless-stopped
-    volumes:
-      - ../../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ../../monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml
-      - prometheus-data:/prometheus
-    ports:
-      - "9090:9090"
-    networks:
-      - app-network
-      - monitoring
-
-  grafana:
-    image: grafana/grafana:10.2.0
-    restart: unless-stopped
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
-    volumes:
-      - ../../monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - ../../monitoring/grafana/dashboards:/var/lib/grafana/dashboards
-      - grafana-data:/var/lib/grafana
-    ports:
-      - "3000:3000"
-    depends_on:
-      - prometheus
-    networks:
-      - monitoring
-
-  node-exporter:
-    image: prom/node-exporter:v1.7.0
-    restart: unless-stopped
-    ports:
-      - "9100:9100"
-    networks:
-      - monitoring
-
-  alertmanager:
-    image: prom/alertmanager:v0.26.0
-    restart: unless-stopped
-    volumes:
-      - ../../monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
-    ports:
-      - "9093:9093"
-    networks:
-      - monitoring
+  # TODO: Re-enable monitoring stack after Docker Hub rate limit resets
+  # prometheus, grafana, node-exporter, alertmanager
 
 volumes:
   db-data:
-  prometheus-data:
-  grafana-data:
 
 networks:
   app-network:
-    driver: bridge
-  monitoring:
     driver: bridge
