@@ -1,5 +1,5 @@
 variable "project_id" {
-  description = "GCP project ID"
+  description = "GCP project ID (lowercase, for resource naming)"
   type        = string
 }
 
@@ -9,7 +9,7 @@ variable "project_number" {
 }
 
 variable "project_name" {
-  description = "Project name for resource naming"
+  description = "Project name for display purposes"
   type        = string
 }
 

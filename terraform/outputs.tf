@@ -9,6 +9,11 @@ output "vm_internal_ip" {
   value       = module.compute.internal_ip
 }
 
+output "vm_external_ip" {
+  description = "App compute instance external IP (for SSH/access)"
+  value       = module.compute.external_ip
+}
+
 output "service_account_email" {
   description = "App VM service account"
   value       = module.compute.service_account_email

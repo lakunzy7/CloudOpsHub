@@ -1,7 +1,7 @@
 # ── Service Account ──
 resource "google_service_account" "app" {
-  account_id   = "${var.project_name}-app-${var.environment}"
-  display_name = "CloudOpsHub App VM - ${var.environment}"
+  account_id   = "${var.project_id}-app-${var.environment}"
+  display_name = "${var.project_name} App VM - ${var.environment}"
 }
 
 resource "google_project_iam_member" "roles" {
@@ -20,7 +20,7 @@ resource "google_project_iam_member" "roles" {
 
 # ── GCE Instance ──
 resource "google_compute_instance" "app_server" {
-  name         = "${var.project_name}-app-${var.environment}"
+  name         = "${var.project_id}-app-${var.environment}"
   machine_type = var.instance_type
   zone         = var.zone
   tags         = ["web", "ssh", "monitoring"]

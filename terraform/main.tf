@@ -8,11 +8,10 @@ terraform {
     }
   }
 
-  # NOTE: Backend bucket name cannot use variables. Update this to match
-  # your project: "<YOUR_PROJECT_ID>-cloudopshub-tf-state"
-  # Or use: terraform init -backend-config="bucket=<YOUR_PROJECT_ID>-cloudopshub-tf-state"
+  # NOTE: Backend bucket name cannot use variables. This bucket will be created
+  # by Terraform on first apply if it doesn't exist, or use: terraform init -backend-config="bucket=<YOUR_PROJECT_ID>-cloudopshub-tf-state"
   backend "gcs" {
-    bucket = "expadox-lab-cloudopshub-tf-state"
+    bucket = "expandox-cloudehub-cloudopshub-tf-state"
     prefix = "terraform/state"
   }
 }
@@ -49,6 +48,7 @@ resource "google_project_service" "apis" {
 module "network" {
   source = "./modules/network"
 
+  project_id      = var.project_id
   project_name    = var.project_name
   environment     = var.environment
   region          = var.region
@@ -95,6 +95,7 @@ module "compute" {
 module "load_balancer" {
   source = "./modules/load_balancer"
 
+  project_id   = var.project_id
   project_name = var.project_name
   environment  = var.environment
   zone         = var.zone

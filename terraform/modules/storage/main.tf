@@ -1,6 +1,6 @@
 # ── Static Assets Bucket ──
 resource "google_storage_bucket" "static_assets" {
-  name          = "${var.project_id}-${var.project_name}-static-${var.environment}"
+  name          = "${var.project_id}-static-${var.environment}"
   location      = var.region
   force_destroy = var.environment != "production"
 
@@ -29,26 +29,10 @@ resource "google_storage_bucket_iam_member" "public_read" {
   member = "allUsers"
 }
 
-# ── Terraform State Bucket ──
-resource "google_storage_bucket" "terraform_state" {
-  name          = "${var.project_id}-cloudopshub-tf-state"
-  location      = var.region
-  force_destroy = false
-
-  uniform_bucket_level_access = true
-
-  versioning { enabled = true }
-
-  lifecycle_rule {
-    condition { num_newer_versions = 5 }
-    action { type = "Delete" }
-  }
-}
-
 # ── Artifact Registry ──
 resource "google_artifact_registry_repository" "docker" {
   location      = var.region
-  repository_id = "${var.project_name}-docker"
+  repository_id = "${var.project_id}-docker"
   format        = "DOCKER"
   description   = "Docker images for CloudOpsHub"
 

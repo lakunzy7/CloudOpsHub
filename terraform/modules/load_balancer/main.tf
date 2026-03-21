@@ -1,11 +1,11 @@
 # ── Global Static IP ──
 resource "google_compute_global_address" "lb_ip" {
-  name = "${var.project_name}-lb-ip-${var.environment}"
+  name = "${var.project_id}-lb-ip-${var.environment}"
 }
 
 # ── Health Check ──
 resource "google_compute_health_check" "app" {
-  name                = "${var.project_name}-health-${var.environment}"
+  name                = "${var.project_id}-health-${var.environment}"
   check_interval_sec  = 10
   timeout_sec         = 5
   healthy_threshold   = 2
@@ -19,7 +19,7 @@ resource "google_compute_health_check" "app" {
 
 # ── Instance Group ──
 resource "google_compute_instance_group" "app" {
-  name = "${var.project_name}-group-${var.environment}"
+  name = "${var.project_id}-group-${var.environment}"
   zone = var.zone
 
   instances = [var.instance_id]
@@ -33,7 +33,7 @@ resource "google_compute_instance_group" "app" {
 # ── Cloud Armor (requires quota, enable for production) ──
 resource "google_compute_security_policy" "app" {
   count = var.enable_cloud_armor ? 1 : 0
-  name  = "${var.project_name}-armor-${var.environment}"
+  name  = "${var.project_id}-armor-${var.environment}"
 
   rule {
     action   = "allow"
@@ -85,7 +85,7 @@ resource "google_compute_security_policy" "app" {
 
 # ── Backend Service ──
 resource "google_compute_backend_service" "app" {
-  name                  = "${var.project_name}-backend-${var.environment}"
+  name                  = "${var.project_id}-backend-${var.environment}"
   protocol              = "HTTP"
   port_name             = "http"
   health_checks         = [google_compute_health_check.app.id]
@@ -105,28 +105,28 @@ resource "google_compute_backend_service" "app" {
 
 # ── URL Map ──
 resource "google_compute_url_map" "app" {
-  name            = "${var.project_name}-urlmap-${var.environment}"
+  name            = "${var.project_id}-urlmap-${var.environment}"
   default_service = google_compute_backend_service.app.id
 }
 
 # ── SSL Certificate (managed, optional) ──
 resource "google_compute_managed_ssl_certificate" "app" {
   count = var.domain_name != "" ? 1 : 0
-  name  = "${var.project_name}-cert-${var.environment}"
+  name  = "${var.project_id}-cert-${var.environment}"
   managed { domains = [var.domain_name] }
 }
 
 # ── HTTPS Proxy ──
 resource "google_compute_target_https_proxy" "app" {
   count            = var.domain_name != "" ? 1 : 0
-  name             = "${var.project_name}-https-proxy-${var.environment}"
+  name             = "${var.project_id}-https-proxy-${var.environment}"
   url_map          = google_compute_url_map.app.id
   ssl_certificates = [google_compute_managed_ssl_certificate.app[0].id]
 }
 
 resource "google_compute_global_forwarding_rule" "https" {
   count                 = var.domain_name != "" ? 1 : 0
-  name                  = "${var.project_name}-https-fwd-${var.environment}"
+  name                  = "${var.project_id}-https-fwd-${var.environment}"
   target                = google_compute_target_https_proxy.app[0].id
   port_range            = "443"
   ip_address            = google_compute_global_address.lb_ip.address
@@ -135,12 +135,12 @@ resource "google_compute_global_forwarding_rule" "https" {
 
 # ── HTTP Proxy ──
 resource "google_compute_target_http_proxy" "app" {
-  name    = "${var.project_name}-http-proxy-${var.environment}"
+  name    = "${var.project_id}-http-proxy-${var.environment}"
   url_map = var.domain_name != "" ? google_compute_url_map.http_redirect[0].id : google_compute_url_map.app.id
 }
 
 resource "google_compute_global_forwarding_rule" "http" {
-  name                  = "${var.project_name}-http-fwd-${var.environment}"
+  name                  = "${var.project_id}-http-fwd-${var.environment}"
   target                = google_compute_target_http_proxy.app.id
   port_range            = "80"
   ip_address            = google_compute_global_address.lb_ip.address
@@ -150,7 +150,7 @@ resource "google_compute_global_forwarding_rule" "http" {
 # ── HTTP-to-HTTPS Redirect ──
 resource "google_compute_url_map" "http_redirect" {
   count = var.domain_name != "" ? 1 : 0
-  name  = "${var.project_name}-http-redirect-${var.environment}"
+  name  = "${var.project_id}-http-redirect-${var.environment}"
 
   default_url_redirect {
     https_redirect         = true
@@ -162,7 +162,7 @@ resource "google_compute_url_map" "http_redirect" {
 # ── DNS (optional) ──
 resource "google_dns_managed_zone" "app" {
   count       = var.domain_name != "" ? 1 : 0
-  name        = "${var.project_name}-zone-${var.environment}"
+  name        = "${var.project_id}-zone-${var.environment}"
   dns_name    = "${var.domain_name}."
   description = "DNS zone for CloudOpsHub ${var.environment}"
 }

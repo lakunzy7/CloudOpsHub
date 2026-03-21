@@ -1,12 +1,12 @@
 # ── VPC ──
 resource "google_compute_network" "vpc" {
-  name                    = "${var.project_name}-vpc-${var.environment}"
+  name                    = "${var.project_id}-vpc-${var.environment}"
   auto_create_subnetworks = false
 }
 
 # ── Subnets ──
 resource "google_compute_subnetwork" "app" {
-  name                     = "${var.project_name}-app-subnet-${var.environment}"
+  name                     = "${var.project_id}-app-subnet-${var.environment}"
   ip_cidr_range            = var.app_subnet_cidr
   region                   = var.region
   network                  = google_compute_network.vpc.id
@@ -15,13 +15,13 @@ resource "google_compute_subnetwork" "app" {
 
 # ── Cloud Router + NAT ──
 resource "google_compute_router" "router" {
-  name    = "${var.project_name}-router-${var.environment}"
+  name    = "${var.project_id}-router-${var.environment}"
   region  = var.region
   network = google_compute_network.vpc.id
 }
 
 resource "google_compute_router_nat" "nat" {
-  name                               = "${var.project_name}-nat-${var.environment}"
+  name                               = "${var.project_id}-nat-${var.environment}"
   router                             = google_compute_router.router.name
   region                             = var.region
   nat_ip_allocate_option             = "AUTO_ONLY"
@@ -35,7 +35,7 @@ resource "google_compute_router_nat" "nat" {
 
 # ── Firewall Rules ──
 resource "google_compute_firewall" "allow_http" {
-  name    = "${var.project_name}-allow-http-${var.environment}"
+  name    = "${var.project_id}-allow-http-${var.environment}"
   network = google_compute_network.vpc.name
 
   allow {
@@ -48,7 +48,7 @@ resource "google_compute_firewall" "allow_http" {
 }
 
 resource "google_compute_firewall" "allow_ssh_iap" {
-  name    = "${var.project_name}-allow-ssh-iap-${var.environment}"
+  name    = "${var.project_id}-allow-ssh-iap-${var.environment}"
   network = google_compute_network.vpc.name
 
   allow {
@@ -61,7 +61,7 @@ resource "google_compute_firewall" "allow_ssh_iap" {
 }
 
 resource "google_compute_firewall" "allow_internal" {
-  name    = "${var.project_name}-allow-internal-${var.environment}"
+  name    = "${var.project_id}-allow-internal-${var.environment}"
   network = google_compute_network.vpc.name
 
   allow {
@@ -82,7 +82,7 @@ resource "google_compute_firewall" "allow_internal" {
 }
 
 resource "google_compute_firewall" "allow_health_check" {
-  name    = "${var.project_name}-allow-hc-${var.environment}"
+  name    = "${var.project_id}-allow-hc-${var.environment}"
   network = google_compute_network.vpc.name
 
   allow {
@@ -95,7 +95,7 @@ resource "google_compute_firewall" "allow_health_check" {
 }
 
 resource "google_compute_firewall" "allow_monitoring" {
-  name    = "${var.project_name}-allow-monitoring-${var.environment}"
+  name    = "${var.project_id}-allow-monitoring-${var.environment}"
   network = google_compute_network.vpc.name
 
   allow {

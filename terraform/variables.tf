@@ -1,12 +1,13 @@
 variable "project_id" {
   description = "GCP project ID"
   type        = string
+  default     = "expandox-cloudehub"
 }
 
 variable "project_name" {
   description = "Project name used for resource naming"
   type        = string
-  default     = "cloudopshub"
+  default     = "Expandox-Cloudehub"
 }
 
 variable "region" {
@@ -72,12 +73,13 @@ variable "alert_email" {
 variable "github_repo" {
   description = "GitHub repository in owner/repo format for WIF"
   type        = string
-  default     = "lakunzy7/CloudOpsHub"
+  default     = "Expandox-Cloudehub"
 }
 
 variable "project_number" {
   description = "GCP project number"
   type        = string
+  default     = "828485768677"
 }
 
 # ── Static assets CORS ──
