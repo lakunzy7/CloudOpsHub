@@ -1,0 +1,46 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+  # Change "dev" to "staging" or "prod" for other environments
+  external_labels:
+    monitor: cloudopshub
+    environment: dev
+
+rule_files:
+  - "alert.rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+
+  # Prometheus monitors itself
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+
+  # VM metrics (CPU, memory, disk)
+  - job_name: node-exporter
+    static_configs:
+      - targets:
+          - node-exporter:9100
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: dev-app-vm
+
+  # Your application metrics
+  - job_name: theepicbook-app
+    static_configs:
+      - targets:
+          - backend:8080
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: theepicbook-app

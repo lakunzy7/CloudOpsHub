@@ -1,0 +1,103 @@
+groups:
+
+  # VM Alerts — monitors the server itself
+  - name: vm-alerts
+    rules:
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance)
+          (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          environment: production
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value }}% — above 80% for 5 minutes."
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes /
+          node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          environment: production
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is {{ $value }}% — above 85% for 5 minutes."
+
+      - alert: HighDiskUsage
+        expr: (1 - (node_filesystem_avail_bytes{mountpoint="/"} /
+          node_filesystem_size_bytes{mountpoint="/"})) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          environment: production
+        annotations:
+          summary: "High disk usage on {{ $labels.instance }}"
+          description: "Disk usage is {{ $value }}%."
+
+  # Container Alerts — monitors Docker containers
+  - name: container-alerts
+    rules:
+
+      - alert: ContainerDown
+        expr: absent(container_last_seen{name=~"theepicbook.*"})
+        for: 1m
+        labels:
+          severity: critical
+          environment: production
+        annotations:
+          summary: "Container {{ $labels.name }} is down"
+          description: "Container has been down for 1 minute. Immediate action required."
+
+      - alert: ContainerRestarting
+        expr: rate(container_restart_count{name=~"theepicbook.*"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          environment: production
+        annotations:
+          summary: "Container {{ $labels.name }} is restarting"
+          description: "Container has been restarting frequently in the last 15 minutes."
+
+  # Application Alerts — monitors your app
+  - name: app-alerts
+    rules:
+
+      - alert: AppDown
+        expr: up{job="theepicbook-app"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          environment: production
+        annotations:
+          summary: "TheEpicBook app is down"
+          description: "Application has been unreachable for 2 minutes."
+
+      - alert: HighErrorRate
+        expr: |
+          (sum(rate(http_requests_total{job="theepicbook-app",status=~"5.."}[5m]))
+           /
+           sum(rate(http_requests_total{job="theepicbook-app"}[5m]))) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+          environment: production
+        annotations:
+          summary: "High error rate on TheEpicBook"
+          description: "HTTP 5xx error rate is {{ $value }}% — above 5% for 5 minutes."
+
+  # Prometheus Health — monitors Prometheus itself
+  - name: prometheus-alerts
+    rules:
+
+      - alert: TargetDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: warning
+          environment: production
+        annotations:
+          summary: "Scrape target down: {{ $labels.job }}"
+          description: "Prometheus cannot reach {{ $labels.job }} at {{ $labels.instance }}."

@@ -86,8 +86,29 @@ jobs:
 
             # GitOps sync agent on VM auto-detects the manifest commit
             # and redeploys within 60 seconds — no manual trigger needed
+            - name: Write secrets and deploy
+              run: |
+                  gcloud compute ssh dev-app-vm \
+                    --zone=us-central1-a \
+                    --project=${{ secrets.GCP_PROJECT_ID }} \
+                    --tunnel-through-iap \
+                    --command="
+                      cd /opt/cloudopshub && \
+                      git pull origin main && \
+
+                      # Write Grafana password to .env
+                      echo 'GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}' > .env && \
+                      chmod 600 .env && \
+
+                      # Inject Slack webhook into alertmanager config
+                      sed -i 's|\$\{SLACK_WEBHOOK_URL\}|${{ secrets.SLACK_WEBHOOK_URL }}|g' gitops/dev/monitoring/alertmanager.yml && \
+
+                      docker-compose --env-file .env -f gitops/base/docker-compose.yml pull && \
+                      docker-compose --env-file .env -f gitops/base/docker-compose.yml up -d && \
+                      echo 'Deployment complete'
+                    "
+
             - name: GitOps sync notification
               run: |
-                  echo "✅ GitOps manifests updated and pushed."
-                  echo "The GitOps sync agent on the VM will detect this change"
-                  echo "and auto-deploy within 60 seconds."
+                  echo "✅ Secrets injected and containers deployed."
+                  echo "Monitoring stack (Prometheus, Grafana, Alertmanager) is starting."
