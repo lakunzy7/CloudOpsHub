@@ -140,7 +140,7 @@ jobs:
 
       # ── Trivy: Scan images for vulnerabilities ──
       - name: Trivy scan Backend image
-        uses: aquasecurity/trivy-action@0.31.0
+        uses: aquasecurity/trivy-action@master
         continue-on-error: true
         with:
           image-ref: ${{ env.REGISTRY }}/theepicbook-backend:${{ env.IMAGE_TAG }}
@@ -149,7 +149,7 @@ jobs:
           severity: CRITICAL,HIGH
 
       - name: Trivy scan Frontend image
-        uses: aquasecurity/trivy-action@0.31.0
+        uses: aquasecurity/trivy-action@master
         continue-on-error: true
         with:
           image-ref: ${{ env.REGISTRY }}/theepicbook-frontend:${{ env.IMAGE_TAG }}
