@@ -59,8 +59,8 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./gitops/dev/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./gitops/dev/monitoring/alert.rules.yml:/etc/prometheus/alert.rules.yml
+      - ../dev/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../dev/monitoring/alert.rules.yml:/etc/prometheus/alert.rules.yml
       - prometheus_data:/prometheus
     networks:
       - app-network
@@ -76,7 +76,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./gitops/dev/monitoring/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
+      - ../dev/monitoring/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
     networks:
       - app-network
 
@@ -98,7 +98,7 @@ services:
     ports:
       - "9093:9093"
     volumes:
-      - ./gitops/dev/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ../dev/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
     networks:
       - app-network
 
