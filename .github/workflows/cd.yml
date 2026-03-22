@@ -83,47 +83,9 @@ jobs:
                   git push
 
             # GitOps sync agent on VM auto-detects the manifest commit
-            # and redeploys within 60 seconds — no manual trigger needed
-            - name: Write deploy script
-              env:
-                  GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-                  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-              run: |
-                  cat > /tmp/deploy.sh <<EOF
-                  #!/bin/bash
-                  set -e
-                  cd /opt/cloudopshub
-                  git pull origin main
-                  echo 'GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}' > .env
-                  chmod 600 .env
-                  sed -i 's|\\\${SLACK_WEBHOOK_URL}|${SLACK_WEBHOOK_URL}|g' gitops/dev/monitoring/alertmanager.yml
-                  docker-compose --env-file .env -f gitops/base/docker-compose.yml pull
-                  docker-compose --env-file .env -f gitops/base/docker-compose.yml up -d
-                  echo 'Deployment complete'
-                  EOF
-                  chmod +x /tmp/deploy.sh
-
-            - name: Pre-generate SSH keys
-              run: |
-                  mkdir -p ~/.ssh
-                  ssh-keygen -t rsa -b 3072 -f ~/.ssh/google_compute_engine -N "" -q
-
-            - name: Copy and run deploy script
-              run: |
-                  gcloud compute scp /tmp/deploy.sh expandox-cloudehub-app-dev:/tmp/deploy.sh \
-                    --zone=us-central1-a \
-                    --project=${{ secrets.GCP_PROJECT_ID }} \
-                    --tunnel-through-iap \
-                    --ssh-key-file=~/.ssh/google_compute_engine
-
-                  gcloud compute ssh expandox-cloudehub-app-dev \
-                    --zone=us-central1-a \
-                    --project=${{ secrets.GCP_PROJECT_ID }} \
-                    --tunnel-through-iap \
-                    --ssh-key-file=~/.ssh/google_compute_engine \
-                    --command="bash /tmp/deploy.sh && rm /tmp/deploy.sh"
-
+            # and redeploys within 60 seconds — no SSH needed.
+            # Secrets are fetched by the VM startup script from GCP Secret Manager.
             - name: GitOps sync notification
               run: |
-                  echo "✅ Secrets injected and containers deployed."
-                  echo "Monitoring stack (Prometheus, Grafana, Alertmanager) is starting."
+                  echo "Manifests updated. GitOps sync agent will deploy within 60s."
+                  echo "Secrets are managed by the VM startup script via GCP Secret Manager."
