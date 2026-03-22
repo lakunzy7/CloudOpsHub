@@ -12,7 +12,7 @@ version: "3.8"
 services:
 
   frontend:
-    image: us-central1-docker.pkg.dev/expandox-cloudehub/expandox-cloudehub-docker/theepicbook-frontend:a2fe14a4d0c113df4cf3d99692707a0893203837
+    image: us-central1-docker.pkg.dev/expandox-cloudehub/expandox-cloudehub-docker/theepicbook-frontend:edaf6331f5e03950ac986f2b72eb33679cc6bdc3
     restart: unless-stopped
     ports:
       - "80:80"
@@ -22,7 +22,7 @@ services:
       - app-network
 
   backend:
-    image: us-central1-docker.pkg.dev/expandox-cloudehub/expandox-cloudehub-docker/theepicbook-backend:a2fe14a4d0c113df4cf3d99692707a0893203837
+    image: us-central1-docker.pkg.dev/expandox-cloudehub/expandox-cloudehub-docker/theepicbook-backend:edaf6331f5e03950ac986f2b72eb33679cc6bdc3
     restart: unless-stopped
     environment:
       - PORT=8080
@@ -34,7 +34,7 @@ services:
       - app-network
 
   database:
-    image: us-central1-docker.pkg.dev/expandox-cloudehub/expandox-cloudehub-docker/theepicbook-database:a2fe14a4d0c113df4cf3d99692707a0893203837
+    image: us-central1-docker.pkg.dev/expandox-cloudehub/expandox-cloudehub-docker/theepicbook-database:edaf6331f5e03950ac986f2b72eb33679cc6bdc3
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
