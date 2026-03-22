@@ -57,14 +57,12 @@ jobs:
                   gcloud artifacts docker images describe \
                     $REGISTRY/theepicbook-database:$IMAGE_TAG
 
-            # ── Operate Stage: Fetch secrets from GCP Secret Manager ──
-            - name: Fetch secrets from GCP Secret Manager
+            # ── Operate Stage: Verify secrets exist in GCP Secret Manager ──
+            - name: Verify secrets accessible
               run: |
-                  DATABASE_URL=$(gcloud secrets versions access latest \
+                  gcloud secrets versions access latest \
                     --secret="Expandox-Cloudehub-database-url-dev" \
-                    --project=${{ secrets.GCP_PROJECT_ID }})
-                  echo "::add-mask::$DATABASE_URL"
-                  echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_ENV
+                    --project=${{ secrets.GCP_PROJECT_ID }} > /dev/null
 
             - name: Update GitOps manifests
               run: |
@@ -112,7 +110,6 @@ jobs:
 
             - name: Copy and run deploy script
               run: |
-                  unset DATABASE_URL
                   gcloud compute scp /tmp/deploy.sh expandox-cloudehub-app-dev:/tmp/deploy.sh \
                     --zone=us-central1-a \
                     --project=${{ secrets.GCP_PROJECT_ID }} \
