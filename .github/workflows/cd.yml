@@ -105,17 +105,24 @@ jobs:
                   EOF
                   chmod +x /tmp/deploy.sh
 
+            - name: Pre-generate SSH keys
+              run: |
+                  mkdir -p ~/.ssh
+                  ssh-keygen -t rsa -b 3072 -f ~/.ssh/google_compute_engine -N "" -q
+
             - name: Copy and run deploy script
               run: |
                   gcloud compute scp /tmp/deploy.sh expandox-cloudehub-app-dev:/tmp/deploy.sh \
                     --zone=us-central1-a \
                     --project=${{ secrets.GCP_PROJECT_ID }} \
-                    --tunnel-through-iap
+                    --tunnel-through-iap \
+                    --ssh-key-file=~/.ssh/google_compute_engine
 
                   gcloud compute ssh expandox-cloudehub-app-dev \
                     --zone=us-central1-a \
                     --project=${{ secrets.GCP_PROJECT_ID }} \
                     --tunnel-through-iap \
+                    --ssh-key-file=~/.ssh/google_compute_engine \
                     --command="bash /tmp/deploy.sh && rm /tmp/deploy.sh"
 
             - name: GitOps sync notification
