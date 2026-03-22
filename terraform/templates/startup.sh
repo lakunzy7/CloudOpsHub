@@ -117,10 +117,10 @@ deploy() {
   cd "$REPO_DIR"
 
   # Inject secrets into monitoring configs (git working tree only, reset on next pull)
-  WEBHOOK_URL=$(grep -oP '^SLACK_WEBHOOK_URL=\K.*' "$$ENV_FILE" 2>/dev/null || true)
+  WEBHOOK_URL=$(grep '^SLACK_WEBHOOK_URL=' "$$ENV_FILE" | cut -d= -f2- | tr -d '\n')
   if [ -n "$$WEBHOOK_URL" ]; then
     for f in gitops/*/monitoring/alertmanager.yml; do
-      [ -f "$f" ] && sed -i "s|\$${SLACK_WEBHOOK_URL}|$$WEBHOOK_URL|g" "$f"
+      [ -f "$f" ] && sed "s|\${SLACK_WEBHOOK_URL}|$$WEBHOOK_URL|g" "$f" > "$f.tmp" && mv "$f.tmp" "$f"
     done
   fi
 
