@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  REGISTRY: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cloudopshub-docker
+  REGISTRY: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/expandox-cloudehub-docker
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:

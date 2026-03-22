@@ -10,7 +10,7 @@ permissions:
     id-token: write
 
 env:
-    REGISTRY: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cloudopshub-docker
+    REGISTRY: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/expandox-cloudehub-docker
 
 jobs:
     # ── Deploy Stage: Secure Cloud Config (Checkov + TFSec) ──
