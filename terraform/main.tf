@@ -67,7 +67,8 @@ module "secrets" {
   db_password      = var.db_password
   db_private_ip    = "database"
   db_name          = "bookstore"
-  grafana_password = var.grafana_password
+  grafana_password  = var.grafana_password
+  slack_webhook_url = var.slack_webhook_url
 
   depends_on = [google_project_service.apis]
 }
@@ -84,6 +85,7 @@ module "compute" {
   subnet_id              = module.network.app_subnet_id
   db_secret_name            = module.secrets.database_url_secret_id
   grafana_secret_name       = module.secrets.grafana_password_secret_id
+  slack_secret_name         = module.secrets.slack_webhook_url_secret_id
   artifact_registry_url     = module.storage.artifact_registry_url
   github_repo               = var.github_repo
   db_password               = var.db_password

@@ -56,6 +56,12 @@ variable "grafana_password" {
   default     = "CloudOps-Grafana-2026!"
 }
 
+variable "slack_webhook_url" {
+  description = "Slack webhook URL for alertmanager notifications"
+  type        = string
+  sensitive   = true
+}
+
 # ── DNS / SSL (optional) ──
 variable "domain_name" {
   description = "Domain name for the app (leave empty to skip DNS/SSL)"

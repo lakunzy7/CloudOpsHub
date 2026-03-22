@@ -47,6 +47,7 @@ resource "google_compute_instance" "app_server" {
     registry_host  = split("/", var.artifact_registry_url)[0]
     db_secret_name      = var.db_secret_name
     grafana_secret_name = var.grafana_secret_name
+    slack_secret_name   = var.slack_secret_name
     github_repo         = var.github_repo
     db_password         = var.db_password
   })

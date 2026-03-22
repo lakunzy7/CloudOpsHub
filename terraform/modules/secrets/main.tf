@@ -22,6 +22,18 @@ resource "google_secret_manager_secret_version" "argocd_token" {
   secret_data = "placeholder-will-be-updated-after-argocd-install"
 }
 
+resource "google_secret_manager_secret" "slack_webhook_url" {
+  secret_id = "${var.project_name}-slack-webhook-url-${var.environment}"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_version" "slack_webhook_url" {
+  secret      = google_secret_manager_secret.slack_webhook_url.id
+  secret_data = var.slack_webhook_url
+}
+
 resource "google_secret_manager_secret" "grafana_password" {
   secret_id = "${var.project_name}-grafana-password-${var.environment}"
   replication {

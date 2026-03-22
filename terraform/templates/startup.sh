@@ -59,6 +59,11 @@ GRAFANA_PASSWORD=$(curl -sf \
   "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/${grafana_secret_name}/versions/latest:access" | \
   python3 -c "import sys,json,base64;print(base64.b64decode(json.load(sys.stdin)['payload']['data']).decode())")
 
+SLACK_WEBHOOK_URL=$(curl -sf \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/${slack_secret_name}/versions/latest:access" | \
+  python3 -c "import sys,json,base64;print(base64.b64decode(json.load(sys.stdin)['payload']['data']).decode())")
+
 # ── 4. Write .env file (consumed by docker-compose from Git) ──
 echo "Writing environment file..."
 ENV_DIR="/var/lib/cloudopshub"
@@ -72,6 +77,7 @@ PORT=8080
 GRAFANA_ADMIN_PASSWORD=$GRAFANA_PASSWORD
 DB_ROOT_PASSWORD=${db_password}
 DB_PASSWORD=${db_password}
+SLACK_WEBHOOK_URL=$SLACK_WEBHOOK_URL
 ENVEOF
 chmod 600 "$ENV_DIR/.env"
 
@@ -109,6 +115,14 @@ log "Source of truth: $REPO_URL (branch: $BRANCH)"
 
 deploy() {
   cd "$REPO_DIR"
+
+  # Inject secrets into monitoring configs (git working tree only, reset on next pull)
+  WEBHOOK_URL=$(grep -oP '^SLACK_WEBHOOK_URL=\K.*' "$$ENV_FILE" 2>/dev/null || true)
+  if [ -n "$$WEBHOOK_URL" ]; then
+    for f in gitops/*/monitoring/alertmanager.yml; do
+      [ -f "$f" ] && sed -i "s|\$${SLACK_WEBHOOK_URL}|$$WEBHOOK_URL|g" "$f"
+    done
+  fi
 
   # App stack from gitops/
   COMPOSE_BASE="gitops/base/docker-compose.yml"

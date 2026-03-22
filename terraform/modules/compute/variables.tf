@@ -13,6 +13,8 @@ variable "github_repo" {
   type        = string
 }
 
+variable "slack_secret_name" { type = string }
+
 variable "db_password" {
   description = "Database password for MySQL containers"
   type        = string
