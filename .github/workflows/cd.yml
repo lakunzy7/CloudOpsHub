@@ -61,7 +61,7 @@ jobs:
             - name: Fetch secrets from GCP Secret Manager
               run: |
                   DATABASE_URL=$(gcloud secrets versions access latest \
-                    --secret="cloudopshub-database-url-dev" \
+                    --secret="Expandox-Cloudehub-database-url-dev" \
                     --project=${{ secrets.GCP_PROJECT_ID }})
                   echo "::add-mask::$DATABASE_URL"
                   echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_ENV
