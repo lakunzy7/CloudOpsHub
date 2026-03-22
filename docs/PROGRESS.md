@@ -1,6 +1,6 @@
 # CloudOpsHub Project Progress
 
-> Last updated: 2026-03-16
+> Last updated: 2026-03-22
 > Reference: Project.md for full requirements
 
 ## ✅ Completed
@@ -58,6 +58,15 @@
 - [x] Grafana dashboard JSON
 - [ ] Verify monitoring stack runs on VM after `terraform apply`
 
+### G. Dev Environment Fixes
+- [x] Fixed volume paths in `gitops/base/docker-compose.yml` (relative to compose file, not repo root)
+- [x] Bumped database memory 256M→512M, grafana 128M→256M
+- [x] Fixed `GRAFANA_ADMIN_PASSWORD` env var in startup script
+- [x] Replaced nohup token refresh with systemd service
+- [x] Added retry logic to CI docker push steps (transient timeout fix)
+- [ ] Verify all containers running on dev VM
+- [ ] Verify app accessible via load balancer IP
+
 ## 🔲 Not Started / In Progress
 
 ### GitHub Secrets to Add
@@ -93,6 +102,7 @@
 - **SA Email:** cloudopshub-app-dev@expadox-lab.iam.gserviceaccount.com
 - **WIF Provider:** projects/129303118923/locations/global/workloadIdentityPools/cloudopshub-github-dev/providers/github-provider
 - **Artifact Registry:** us-central1-docker.pkg.dev/expadox-lab/cloudopshub-docker
-- **Load Balancer IP:** 34.54.161.113
+- **Load Balancer IP:** 35.244.135.223
+- **VM External IP:** 136.112.128.101
 - **VM Internal IP:** 10.0.1.2
 - **GitHub Repo:** lakunzy7/CloudOpsHub

@@ -157,18 +157,18 @@ jobs:
           exit-code: 1
           severity: CRITICAL,HIGH
 
-      # ── Push to Artifact Registry ──
+      # ── Push to Artifact Registry (with retry for transient network errors) ──
       - name: Push Backend image
         run: |
-          docker push $REGISTRY/theepicbook-backend:$IMAGE_TAG
-          docker push $REGISTRY/theepicbook-backend:latest
+          for i in 1 2 3; do docker push $REGISTRY/theepicbook-backend:$IMAGE_TAG && break || sleep 10; done
+          for i in 1 2 3; do docker push $REGISTRY/theepicbook-backend:latest && break || sleep 10; done
 
       - name: Push Frontend image
         run: |
-          docker push $REGISTRY/theepicbook-frontend:$IMAGE_TAG
-          docker push $REGISTRY/theepicbook-frontend:latest
+          for i in 1 2 3; do docker push $REGISTRY/theepicbook-frontend:$IMAGE_TAG && break || sleep 10; done
+          for i in 1 2 3; do docker push $REGISTRY/theepicbook-frontend:latest && break || sleep 10; done
 
       - name: Push Database image
         run: |
-          docker push $REGISTRY/theepicbook-database:$IMAGE_TAG
-          docker push $REGISTRY/theepicbook-database:latest
+          for i in 1 2 3; do docker push $REGISTRY/theepicbook-database:$IMAGE_TAG && break || sleep 10; done
+          for i in 1 2 3; do docker push $REGISTRY/theepicbook-database:latest && break || sleep 10; done
