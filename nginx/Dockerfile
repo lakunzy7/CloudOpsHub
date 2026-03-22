@@ -2,7 +2,7 @@
 # Serves static assets (CSS, JS, images) and reverse proxies to backend
 
 FROM nginx:1.25-alpine
-RUN apk add --no-cache wget=1.24.5-r0 && rm /etc/nginx/conf.d/default.conf
+RUN apk add --no-cache wget=1.21.4-r0 && rm /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/
 COPY public/ /usr/share/nginx/html/
 EXPOSE 80
