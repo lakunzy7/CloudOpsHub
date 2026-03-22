@@ -127,6 +127,7 @@ module "wif" {
   project_name          = var.project_name
   environment           = var.environment
   github_repo           = var.github_repo
+  github_owner          = var.github_owner
   service_account_email = module.compute.service_account_email
 
   depends_on = [google_project_service.apis]

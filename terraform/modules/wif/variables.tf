@@ -23,6 +23,11 @@ variable "github_repo" {
   type        = string
 }
 
+variable "github_owner" {
+  description = "GitHub repository owner (user or org)"
+  type        = string
+}
+
 variable "service_account_email" {
   description = "Service account email to allow impersonation"
   type        = string

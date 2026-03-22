@@ -73,7 +73,13 @@ variable "alert_email" {
 variable "github_repo" {
   description = "GitHub repository in owner/repo format for WIF"
   type        = string
-  default     = "Expandox-Cloudehub"
+  default     = "lakunzy7/CloudOpsHub"
+}
+
+variable "github_owner" {
+  description = "GitHub repository owner (user or org) for WIF"
+  type        = string
+  default     = "lakunzy7"
 }
 
 variable "project_number" {
