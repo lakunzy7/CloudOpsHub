@@ -98,6 +98,7 @@ Environment=GITOPS_SYNC_INTERVAL=60
 Environment=COMPOSE_BIN=/var/lib/toolbox/docker-compose
 Environment=REGISTRY_HOST=${registry_host}
 Environment=GCP_PROJECT_ID=${project_id}
+Environment=HOME=/var/lib
 Environment=PATH=/var/lib/toolbox:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/bin/bash /var/lib/gitops/gitops-sync.sh
 StandardOutput=journal
