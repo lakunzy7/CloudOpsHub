@@ -1,59 +1,49 @@
-CloudOpsHub: Build an Automated Docker-Based Infrastructure Platform with GitOps and Continuous Delivery
-Background
-CloudOpsHub is a growing SaaS company that provides real-time analytics to a diverse customer base across multiple regions. As their user base scales, they face challenges with manual infrastructure provisioning, inconsistent environment setups, and delayed deployments due to their reliance on traditional, non-automated processes.
-The company is looking to modernize its infrastructure management and deployment pipelines. Specifically, they need to automate the creation of multi-environment platforms (development, staging, production), containerize their microservices using Docker, and build a GitOps pipeline for continuous deployment and reliable monitoring.
-Key Components:
-●	Docker for containerizing applications
-●	CI/CD pipelines for building, testing, and deploying applications
-●	ArgoCD or Flux for GitOps-style continuous deployment
-●	Terraform for infrastructure provisioning and management
-●	Monitoring and logging using cloud-native tools
-●	Multiple environments: Development, Staging, Production
+# CloudOpsHub Project
 
-2. Deliverable and Workflow
-A. Environment Setup
-You’ll set up 3 environments: Development, and Staging with the following components:
-●	Cloud infrastructure: Use AWS, Azure, or Google Cloud for provisioning VMs, networking, and services.
-●	Load balancer (like AWS ALB or NGINX): Distribute traffic across application instances.
-●	Object Storage (e.g., AWS S3, Google Cloud Storage): For static content storage.
-●	Databases (e.g., RDS, CloudSQL): Provision databases in each environment.
+## Overview
 
-You’ll provision VMs (EC2, Azure VMs, or Google Compute Engine) to run your Docker containers in each environment. Use Terraform to automate provisioning across multiple environments.
-B. Dockerization of Microservices
-You will containerize a simple microservices-based application using Docker. The application will have:
-1.	Frontend: 
-2.	Backend: 
-3.	Database
-Dockerizing the services involves:
-●	Writing Dockerfiles for each service.
-●	Build and test the Docker images.
-●	Push images to a Docker registry (AWS ECR, Docker Hub, etc.).
+CloudOpsHub is an automated Docker-based infrastructure platform with GitOps and continuous delivery. It provisions multi-environment platforms (dev, staging, production) on Google Cloud, containerizes microservices with Docker, and uses a GitOps pipeline for continuous deployment with monitoring.
 
-C. CI/CD Pipeline (with GitOps)
-You will implement CI/CD pipelines using GitOps principles. The pipeline will be triggered on code changes pushed to a Git repository (e.g., GitHub, GitLab, Bitbucket).
-The CI/CD process will involve the following:
-1.	CI Pipeline:
-○	Build the Docker images for the frontend, backend, and database services.
-○	Test the images and push them to the container registry (AWS ECR, Docker Hub).
-○	Create tags for image versions to indicate stable releases.
+## Components
 
-2.	CD Pipeline (GitOps):
-○	Use ArgoCD (or Flux) to manage the deployment of the Docker containers. This ensures that the deployment process is managed directly from Git repositories.
-○	Use Git repositories to define the deployment configurations (e.g., Docker Compose or simple shell scripts).
-○	Each environment (Dev, Staging, Prod) will have separate repositories or directories in the same repo for configurations.
-○	GitOps will synchronize these changes automatically to the cloud environment (e.g., AWS EC2) using ArgoCD’s synchronization mechanism.
-D. Infrastructure as Code (IaC) with Terraform
-Use Terraform to automate the creation of the infrastructure required to run the application. This includes:
-1.	Cloud infrastructure (AWS, Google Cloud, or Azure) – VMs, networking, storage.
-2.	VMs (EC2, Google Compute Engine, or Azure VMs) to host Docker containers.
-3.	Container Registry (e.g., ECR, Docker Hub) for storing Docker images.
-4.	Databases (e.g., RDS for AWS, Cloud SQL for GCP) and object storage (e.g., S3).
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| App Frontend | Nginx | Reverse proxy, static assets, security headers |
+| App Backend | Node.js/Express | REST API, server-side rendering |
+| Database | MySQL 8.0 (Docker) | Application data with seed data |
+| Infrastructure | Terraform | VPC, VM, service accounts, secrets, registry |
+| CI/CD | GitHub Actions | Build images, update manifests |
+| GitOps | Bash systemd service | Poll Git, deploy on change |
+| Monitoring | Prometheus + Grafana | Metrics, dashboards, alerts |
+| Alerting | Alertmanager | Slack notifications for incidents |
 
-E. GitOps with ArgoCD or Flux
-Use ArgoCD (or Flux) to automate deployments by tracking changes in the Git repository and deploying containers to cloud VMs.
-ArgoCD or Flux will watch for changes in Git repositories that contain Docker Compose files, shell scripts, or deployment manifests, and trigger deployments when changes occur.
-F. Monitoring, Logging, and Alerts
-Use cloud-native tools or third-party services for monitoring and logging, like CloudWatch (AWS), Google Cloud Monitoring, or Prometheus/Grafana. Set up monitoring for container health, resource usage, and application performance.
-●	Logs: Use CloudWatch Logs (AWS) or Google Stackdriver for centralized logging.
-●	Monitoring: Use Prometheus + Grafana to monitor container metrics (CPU, memory, etc.).
-●	Alerts: Set up alerts in Prometheus/Grafana or CloudWatch for critical failures (e.g., container crashes, resource limits).
+## How It Works
+
+1. Developer pushes code to `main` branch
+2. **CI** pipeline: lint code, build Docker images, push to Artifact Registry
+3. **CD** pipeline: update image tags in `gitops/docker-compose.yml`, commit and push
+4. **GitOps sync** on VM detects manifest change within 60s, pulls new images, redeploys
+
+## Environments
+
+Each environment (dev/staging/production) has:
+- Its own GCP VM provisioned by Terraform
+- Separate secrets in GCP Secret Manager
+- Environment-specific resource limits in `gitops/overlays/{env}/`
+- Environment-specific monitoring configs in `gitops/{env}/monitoring/`
+
+Deploy a new environment:
+```bash
+cd infra
+terraform workspace new staging
+terraform apply -var-file=staging.tfvars
+```
+
+## GitHub Secrets Required
+
+| Secret | Description |
+|--------|-------------|
+| `GCP_PROJECT_ID` | GCP project ID |
+| `GCP_REGION` | GCP region (e.g., `us-central1`) |
+| `GCP_WIF_PROVIDER` | Workload Identity provider (from `terraform output wif_provider`) |
+| `GCP_SA_EMAIL` | Service account email (from `terraform output service_account_email`) |

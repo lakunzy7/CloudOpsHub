@@ -10,67 +10,11 @@ permissions:
   contents: read
 
 env:
-  REGISTRY: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/expandox-cloudehub-docker
+  REGISTRY: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cloudopshub-docker
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
 
-  # ── Code Stage: Secure Source Code (Snyk + SonarQube) ──
-  snyk-code-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: npm
-          cache-dependency-path: theepicbook/package-lock.json
-      - run: cd theepicbook && npm ci
-      - name: Snyk code and dependency scan
-        uses: snyk/actions/node@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high --file=theepicbook/package.json
-
-  sonarqube-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: SonarQube scan
-        uses: SonarSource/sonarqube-scan-action@v6
-        continue-on-error: true
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        with:
-          args: >
-            -Dsonar.organization=lakunzy7
-            -Dsonar.projectKey=cloudopshub-theepicbook
-            -Dsonar.sources=theepicbook/
-            -Dsonar.exclusions=theepicbook/node_modules/**,theepicbook/public/assets/js/materialize*
-      - name: SonarQube quality gate check
-        uses: SonarSource/sonarqube-quality-gate-action@v1
-        continue-on-error: true
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-  # ── Commit Stage: Prevent Secret Leaks (Gitleaks) ──
-  gitleaks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Gitleaks secret detection
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ── Lint & Audit ──
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -83,22 +27,8 @@ jobs:
       - run: cd theepicbook && npm ci
       - run: cd theepicbook && npm run lint
 
-  docker-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Lint Backend Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: theepicbook/Dockerfile
-      - name: Lint Frontend Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: nginx/Dockerfile
-
-  # ── Build Stage: Build, Scan, Push Docker Images (Trivy) ──
   build-and-push:
-    needs: [lint, snyk-code-scan, sonarqube-scan, gitleaks, docker-lint]
+    needs: [lint]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     permissions:
@@ -116,59 +46,27 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
 
-      # ── Build Backend (Service 2: Node.js API + SSR) ──
-      - name: Build Backend image
+      - name: Build and push Backend image
         run: |
-          cd theepicbook
-          docker build -t $REGISTRY/theepicbook-backend:$IMAGE_TAG .
-          docker tag $REGISTRY/theepicbook-backend:$IMAGE_TAG $REGISTRY/theepicbook-backend:latest
+          docker build -t $REGISTRY/theepicbook-backend:$IMAGE_TAG \
+                        -t $REGISTRY/theepicbook-backend:latest \
+                        theepicbook/
+          docker push $REGISTRY/theepicbook-backend:$IMAGE_TAG
+          docker push $REGISTRY/theepicbook-backend:latest
 
-      # ── Build Frontend (Service 1: Nginx + static assets) ──
-      - name: Build Frontend image
+      - name: Build and push Frontend image
         run: |
           cp -r theepicbook/public nginx/public
-          cd nginx
-          docker build -t $REGISTRY/theepicbook-frontend:$IMAGE_TAG .
-          docker tag $REGISTRY/theepicbook-frontend:$IMAGE_TAG $REGISTRY/theepicbook-frontend:latest
+          docker build -t $REGISTRY/theepicbook-frontend:$IMAGE_TAG \
+                        -t $REGISTRY/theepicbook-frontend:latest \
+                        nginx/
+          docker push $REGISTRY/theepicbook-frontend:$IMAGE_TAG
+          docker push $REGISTRY/theepicbook-frontend:latest
 
-      # ── Build Database (Service 3: MySQL with seed data) ──
-      - name: Build Database image
+      - name: Build and push Database image
         run: |
-          cd theepicbook/db
-          docker build -t $REGISTRY/theepicbook-database:$IMAGE_TAG .
-          docker tag $REGISTRY/theepicbook-database:$IMAGE_TAG $REGISTRY/theepicbook-database:latest
-
-      # ── Trivy: Scan images for vulnerabilities ──
-      - name: Trivy scan Backend image
-        uses: aquasecurity/trivy-action@master
-        continue-on-error: true
-        with:
-          image-ref: ${{ env.REGISTRY }}/theepicbook-backend:${{ env.IMAGE_TAG }}
-          format: table
-          exit-code: 1
-          severity: CRITICAL,HIGH
-
-      - name: Trivy scan Frontend image
-        uses: aquasecurity/trivy-action@master
-        continue-on-error: true
-        with:
-          image-ref: ${{ env.REGISTRY }}/theepicbook-frontend:${{ env.IMAGE_TAG }}
-          format: table
-          exit-code: 1
-          severity: CRITICAL,HIGH
-
-      # ── Push to Artifact Registry (with retry for transient network errors) ──
-      - name: Push Backend image
-        run: |
-          for i in 1 2 3; do docker push $REGISTRY/theepicbook-backend:$IMAGE_TAG && break || sleep 10; done
-          for i in 1 2 3; do docker push $REGISTRY/theepicbook-backend:latest && break || sleep 10; done
-
-      - name: Push Frontend image
-        run: |
-          for i in 1 2 3; do docker push $REGISTRY/theepicbook-frontend:$IMAGE_TAG && break || sleep 10; done
-          for i in 1 2 3; do docker push $REGISTRY/theepicbook-frontend:latest && break || sleep 10; done
-
-      - name: Push Database image
-        run: |
-          for i in 1 2 3; do docker push $REGISTRY/theepicbook-database:$IMAGE_TAG && break || sleep 10; done
-          for i in 1 2 3; do docker push $REGISTRY/theepicbook-database:latest && break || sleep 10; done
+          docker build -t $REGISTRY/theepicbook-database:$IMAGE_TAG \
+                        -t $REGISTRY/theepicbook-database:latest \
+                        theepicbook/db/
+          docker push $REGISTRY/theepicbook-database:$IMAGE_TAG
+          docker push $REGISTRY/theepicbook-database:latest

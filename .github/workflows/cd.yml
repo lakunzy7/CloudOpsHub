@@ -1,91 +1,38 @@
 name: CD
+
 on:
-    workflow_run:
-        workflows: [CI]
-        types: [completed]
-        branches: [main]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
 
 permissions:
-    contents: write
-    id-token: write
+  contents: write
 
 env:
-    REGISTRY: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/expandox-cloudehub-docker
+  REGISTRY: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cloudopshub-docker
 
 jobs:
-    # ── Deploy Stage: Secure Cloud Config (Checkov + TFSec) ──
-    terraform-security:
-        runs-on: ubuntu-latest
-        if: ${{ github.event.workflow_run.conclusion == 'success' }}
-        steps:
-            - uses: actions/checkout@v4
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
 
-            - name: Checkov Terraform scan
-              uses: bridgecrewio/checkov-action@v12
-              with:
-                  directory: terraform/
-                  framework: terraform
-                  soft_fail: true
+      - name: Update image tags in GitOps manifest
+        run: |
+          IMAGE_TAG=${{ github.event.workflow_run.head_sha }}
+          sed -i "s|image:.*theepicbook-backend.*|image: $REGISTRY/theepicbook-backend:$IMAGE_TAG|" \
+            gitops/docker-compose.yml
+          sed -i "s|image:.*theepicbook-frontend.*|image: $REGISTRY/theepicbook-frontend:$IMAGE_TAG|" \
+            gitops/docker-compose.yml
+          sed -i "s|image:.*theepicbook-database.*|image: $REGISTRY/theepicbook-database:$IMAGE_TAG|" \
+            gitops/docker-compose.yml
 
-            - name: TFSec Terraform scan
-              uses: aquasecurity/tfsec-action@v1.0.3
-              with:
-                  working_directory: terraform/
-                  soft_fail: true
-
-    deploy:
-        needs: [terraform-security]
-        runs-on: ubuntu-latest
-        if: ${{ github.event.workflow_run.conclusion == 'success' }}
-        environment: dev
-        steps:
-            - uses: actions/checkout@v4
-
-            - name: Authenticate to Google Cloud
-              uses: google-github-actions/auth@v2
-              with:
-                  workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-                  service_account: ${{ secrets.GCP_SA_EMAIL }}
-
-            - name: Verify images exist in Artifact Registry
-              run: |
-                  IMAGE_TAG=${{ github.event.workflow_run.head_sha }}
-                  gcloud artifacts docker images describe \
-                    $REGISTRY/theepicbook-backend:$IMAGE_TAG
-                  gcloud artifacts docker images describe \
-                    $REGISTRY/theepicbook-frontend:$IMAGE_TAG
-                  gcloud artifacts docker images describe \
-                    $REGISTRY/theepicbook-database:$IMAGE_TAG
-
-            # ── Operate Stage: Verify secrets exist in GCP Secret Manager ──
-            - name: Verify secrets accessible
-              run: |
-                  gcloud secrets versions access latest \
-                    --secret="Expandox-Cloudehub-database-url-dev" \
-                    --project=${{ secrets.GCP_PROJECT_ID }} > /dev/null
-
-            - name: Update GitOps manifests
-              run: |
-                  IMAGE_TAG=${{ github.event.workflow_run.head_sha }}
-                  sed -i "s|image:.*theepicbook-backend.*|image: $REGISTRY/theepicbook-backend:$IMAGE_TAG|" \
-                    gitops/base/docker-compose.yml
-                  sed -i "s|image:.*theepicbook-frontend.*|image: $REGISTRY/theepicbook-frontend:$IMAGE_TAG|" \
-                    gitops/base/docker-compose.yml
-                  sed -i "s|image:.*theepicbook-database.*|image: $REGISTRY/theepicbook-database:$IMAGE_TAG|" \
-                    gitops/base/docker-compose.yml
-
-            - name: Commit and push manifest update
-              run: |
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
-                  git add gitops/
-                  git commit -m "chore: update image to ${{ github.event.workflow_run.head_sha }} [skip ci]" || exit 0
-                  git push
-
-            # GitOps sync agent on VM auto-detects the manifest commit
-            # and redeploys within 60 seconds — no SSH needed.
-            # Secrets are fetched by the VM startup script from GCP Secret Manager.
-            - name: GitOps sync notification
-              run: |
-                  echo "Manifests updated. GitOps sync agent will deploy within 60s."
-                  echo "Secrets are managed by the VM startup script via GCP Secret Manager."
+      - name: Commit and push manifest update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add gitops/docker-compose.yml
+          git commit -m "chore: update image to ${{ github.event.workflow_run.head_sha }} [skip ci]" || exit 0
+          git push

@@ -11,6 +11,8 @@ node_modules/
 *.tfstate
 *.tfstate.backup
 *.tfvars
+!*.tfvars.example
+*.tfplan
 
 # OS
 .DS_Store
@@ -26,5 +28,6 @@ Thumbs.db
 # Claude Code
 .claude/
 CLAUDE.md
-*.tfplan
-tfplan
+
+# Nginx build artifact
+nginx/public/

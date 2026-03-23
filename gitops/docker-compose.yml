@@ -1,0 +1,99 @@
+version: "3.8"
+
+# ── CloudOpsHub Production Stack ──
+# Frontend (nginx) + Backend (node) + Database (mysql)
+# Prometheus + Grafana + Node Exporter + Alertmanager
+
+services:
+
+  frontend:
+    image: ${REGISTRY}/theepicbook-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  backend:
+    image: ${REGISTRY}/theepicbook-backend:latest
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  database:
+    image: ${REGISTRY}/theepicbook-database:latest
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: bookstore
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./${GITOPS_ENV:-dev}/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./${GITOPS_ENV:-dev}/monitoring/alert.rules.yml:/etc/prometheus/alert.rules.yml
+      - prometheus_data:/prometheus
+    networks:
+      - app-network
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./${GITOPS_ENV:-dev}/monitoring/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
+    networks:
+      - app-network
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    networks:
+      - app-network
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./${GITOPS_ENV:-dev}/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    networks:
+      - app-network
+
+volumes:
+  db-data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  app-network:
+    driver: bridge

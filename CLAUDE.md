@@ -1,44 +1,58 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## ⚡ Project Progress
-**ALWAYS read `docs/PROGRESS.md` first** to see where we left off. Resume from the next uncompleted task.
-Current status: Dev environment live. CI/CD pipeline working end-to-end. Next step → staging environment.
-
 ## Project Overview
 
-CloudOpsHub is an automated Docker-based infrastructure platform with GitOps and continuous delivery. The main application is **TheEpicBook**, an online bookstore (Node.js/Express) located in `theepicbook/`.
-
-## Common Commands
-
-All commands run from `theepicbook/`:
-
-```bash
-npm install          # Install dependencies
-npm start            # Start server (port 8080)
-npm test             # Runs linting (no unit tests exist)
-npm run lint         # ESLint check
-```
+CloudOpsHub is a Docker-based infrastructure platform with GitOps continuous delivery. The app is **TheEpicBook**, an online bookstore (Node.js/Express) in `theepicbook/`.
 
 ## Architecture
 
-**TheEpicBook** follows MVC pattern:
-- **server.js** - Express entry point, configures Handlebars templating, mounts routes, syncs Sequelize models then listens on PORT (default 8080)
-- **models/** - Sequelize models (Book, Author, Cart, Checkout) auto-loaded by `models/index.js` which reads all `.js` files in the directory
-- **routes/html-routes.js** - Page rendering routes (/, /cart, /gallery)
-- **routes/cart-api-routes.js** - REST API for cart operations (exported as function taking `app`)
-- **views/** - Handlebars templates with `layouts/main.handlebars` as default layout
-- **public/** - Static assets (CSS, JS, images)
-- **config/config.json** - Sequelize DB config per environment (development/test/production)
-- **db/** - SQL seed files and CSVs for books/authors
+```
+GitHub push → CI (build images) → CD (update manifest) → GitOps sync (deploy on VM)
+```
 
-Database: MySQL via Sequelize ORM. Production uses `DATABASE_URL` env variable.
+**Services** (Docker Compose):
+- Frontend: nginx reverse proxy + static assets (`nginx/`)
+- Backend: Node.js/Express API + Handlebars SSR (`theepicbook/`)
+- Database: MySQL 8.0 with seed data (`theepicbook/db/`)
+- Monitoring: Prometheus, Grafana, Alertmanager, Node Exporter
+
+**Infrastructure** (GCP via Terraform in `infra/`):
+- Single `main.tf` — no modules. VPC, VM, Service Account, Firewall, Secrets, Artifact Registry, WIF.
+- VM runs Container-Optimized OS with Docker Compose.
+
+**GitOps**: systemd service on VM polls Git every 60s. On change → `docker-compose pull && up -d`.
+
+## Common Commands
+
+```bash
+# Local dev
+docker compose up --build          # Start full stack locally
+cd theepicbook && npm run lint     # ESLint check
+
+# Infrastructure
+cd infra && terraform init && terraform apply -var-file=dev.tfvars
+
+# Check VM
+gcloud compute ssh <vm-name> --zone us-central1-a
+journalctl -u gitops-sync -f      # GitOps sync logs on VM
+docker ps                          # Container status on VM
+```
+
+## Key Paths
+
+- `infra/main.tf` — All Terraform (no modules)
+- `gitops/docker-compose.yml` — Production deployment manifest
+- `gitops/overlays/{env}/` — Per-environment resource overrides
+- `gitops/{env}/monitoring/` — Prometheus, Grafana, Alertmanager configs per env
+- `scripts/startup.sh` — VM bootstrap (Terraform template)
+- `scripts/gitops-sync.sh` — GitOps sync loop
+- `.github/workflows/ci.yml` — Build & push images
+- `.github/workflows/cd.yml` — Update manifest tags
 
 ## Code Style
 
-ESLint enforces: 2-space indent, double quotes, semicolons required, camelCase, strict equality (`===`), curly braces required. See `.eslintrc.json`.
+ESLint: 2-space indent, double quotes, semicolons required, camelCase, `===`, curly braces. See `theepicbook/.eslintrc.json`.
 
-## Infrastructure Context
+## Environments
 
-The broader project (described in `docs/project.md`) involves Docker containerization, Terraform IaC, GitHub Actions CI/CD, and a lightweight GitOps sync agent across dev/staging/production environments on GCP.
+Dev, Staging, Production — each gets its own VM, secrets, and overlay config. Deploy with different `.tfvars` files.

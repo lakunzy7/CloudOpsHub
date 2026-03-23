@@ -1,0 +1,12 @@
+project_id    = "expandox-cloudehub"
+project_name  = "cloudopshub"
+environment   = "dev"
+region        = "us-central1"
+zone          = "us-central1-a"
+instance_type = "e2-medium"
+github_repo   = "lakunzy7/CloudOpsHub"
+
+# Sensitive — set via env vars or -var flag:
+# db_password       = "..."
+# grafana_password  = "..."
+# slack_webhook_url = "..."
