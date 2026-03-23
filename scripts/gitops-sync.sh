@@ -62,6 +62,12 @@ deploy() {
 
   log "Deploying stack..."
   $COMPOSE_CMD up -d --remove-orphans 2>&1
+
+  # Force restart alertmanager to pick up injected webhook
+  if [ -n "$WEBHOOK_URL" ]; then
+    $COMPOSE_CMD restart alertmanager 2>&1
+  fi
+
   return 0
 }
 
