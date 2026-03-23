@@ -24,7 +24,7 @@ receivers:
 
   - name: slack-notifications
     slack_configs:
-      - channel: "#cloudopshub-alerts"
+      - channel: "#devops"
         send_resolved: true
         title: >
           [{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}
@@ -37,7 +37,7 @@ receivers:
 
   - name: slack-critical
     slack_configs:
-      - channel: "#cloudopshub-alerts"
+      - channel: "#devops"
         send_resolved: true
         title: >
           [CRITICAL] {{ .GroupLabels.alertname }}
