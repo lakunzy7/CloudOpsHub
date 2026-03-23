@@ -68,6 +68,8 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./${GITOPS_ENV:-dev}/monitoring/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
+      - ./${GITOPS_ENV:-dev}/monitoring/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml
+      - ./${GITOPS_ENV:-dev}/monitoring/dashboards:/var/lib/grafana/dashboards
     networks:
       - app-network
 

@@ -1,0 +1,180 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "App Up/Down",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"theepicbook-app\"}",
+          "legendFormat": "App"
+        }
+      ]
+    },
+    {
+      "title": "Prometheus Targets Up",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"prometheus\"}",
+          "legendFormat": "Prometheus"
+        }
+      ]
+    },
+    {
+      "title": "Node Exporter Up",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "up{job=\"node-exporter\"}",
+          "legendFormat": "Node Exporter"
+        }
+      ]
+    },
+    {
+      "title": "Active Alerts",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "legendFormat": "Firing"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["count"] } }
+    },
+    {
+      "title": "Scrape Duration (seconds)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "scrape_duration_seconds",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "title": "Scrape Samples",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "scrape_samples_scraped",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "title": "Prometheus TSDB Head Series",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 12 },
+      
+      "targets": [
+        {
+          "expr": "prometheus_tsdb_head_series",
+          "legendFormat": "Series"
+        }
+      ]
+    },
+    {
+      "title": "Prometheus Storage Size",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 12 },
+      
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      },
+      "targets": [
+        {
+          "expr": "prometheus_tsdb_storage_blocks_bytes",
+          "legendFormat": "Storage"
+        }
+      ]
+    },
+    {
+      "title": "Prometheus Ingestion Rate",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 12 },
+      
+      "fieldConfig": {
+        "defaults": { "unit": "ops" }
+      },
+      "targets": [
+        {
+          "expr": "rate(prometheus_tsdb_head_samples_appended_total[5m])",
+          "legendFormat": "Samples/sec"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["application", "prometheus"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "Application & Monitoring Health",
+  "uid": "app-health"
+}
