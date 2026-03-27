@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  security-events: write
 
 env:
   REGISTRY: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cloudopshub-docker
@@ -27,10 +28,53 @@ jobs:
       - run: cd theepicbook && npm ci
       - run: cd theepicbook && npm run lint
 
-  build-and-push:
-    needs: [lint]
+  security-scan:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks — Scan for hardcoded secrets
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Trivy — Filesystem vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        continue-on-error: true
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+
+      - name: tfsec — Terraform security scan
+        uses: aquasecurity/trivy-action@master
+        continue-on-error: true
+        with:
+          scan-type: 'config'
+          scan-ref: 'infra'
+          format: 'table'
+
+      - name: Snyk Code — SAST scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: code test
+
+      - name: SonarCloud — Code quality scan
+        uses: SonarSource/sonarqube-scan-action@master
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  build-and-push:
+    needs: [lint, security-scan]
+    runs-on: ubuntu-latest
+    if: ${{ always() && needs.lint.result == 'success' && github.ref == 'refs/heads/main' }}
     permissions:
       id-token: write
       contents: read
