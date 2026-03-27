@@ -67,11 +67,19 @@ infra/
     production.tfvars
 ```
 
-**Zero-downtime migration**: Used Terraform `moved` blocks to relocate all 21 resources from root to modules without destroying/recreating anything. Staging remained live throughout the refactor.
+The result: clean separation without complexity. Each module is ~30-40 lines, easy to understand. The root `main.tf` remains readable at ~50 lines.
 
-**Shared Artifact Registry**: The Docker registry (`cloudopshub-docker`) has no environment suffix and is shared across all environments. Introduced `create_artifact_registry` variable — first environment creates it, others skip creation to avoid conflicts.
+### Zero-Downtime Migration
 
-**Professional layout**: Environment-specific configurations live in `infra/env/`:
+Used Terraform `moved` blocks to relocate all 21 resources from root to modules without destroying/recreating anything. Staging remained live throughout the refactor.
+
+### Shared Artifact Registry
+
+The Docker registry (`cloudopshub-docker`) has no environment suffix and is shared across all environments. Introduced `create_artifact_registry` variable — first environment creates it, others skip creation to avoid "resource already exists" errors without requiring manual imports.
+
+### Professional Layout
+
+Environment-specific configurations live in `infra/env/`:
 
 ```
 infra/env/
@@ -92,7 +100,7 @@ A single `terraform apply -var-file=env/<env>.tfvars` provisions everything:
 - **Secrets** (`modules/secrets`): 3 secrets + versions (DB password, Grafana password, Slack webhook)
 - **WIF** (`modules/wif`): Workload Identity Pool, OIDC provider, SA binding
 - **APIs** (root): Auto-enables required GCP services
-- **Artifact Registry** (root): Shared Docker registry (created once)
+- **Artifact Registry** (root): Shared Docker registry (created once by first environment)
 
 ---
 
@@ -420,15 +428,15 @@ CloudOpsHub/
       iam/               — Service account, IAM bindings (6 resources)
       secrets/           — 3 secrets + 3 versions (6 resources)
       compute/           — Static IP, VM instance (2 resources)
-      wif/               — WIF pool, provider, SA binding (3 resources)
+      wif/               — WIF pool, provider, binding (3 resources)
     env/
-      dev.tfvars.example         — Copy to dev.tfvars, fill passwords
-      staging.tfvars             # Local only (gitignored, contains secrets)
-      production.tfvars          # Local only (gitignored, contains secrets)
+      dev.tfvars.example  — Example with create_artifact_registry = true
+      staging.tfvars      — Staging config
+      production.tfvars   — Production config
 
   scripts/
-    startup.sh           — VM bootstrap (installs Docker, Docker Compose, writes .env)
-    gitops-sync.sh       — GitOps agent (systemd, polls every 60s)
+    startup.sh           — VM bootstrap (Terraform templatefile)
+    gitops-sync.sh       — GitOps sync agent (systemd)
 
   gitops/
     docker-compose.yml   — 7 services (frontend, backend, database, prometheus, grafana, alertmanager, node-exporter)
@@ -440,12 +448,12 @@ CloudOpsHub/
   .github/workflows/
     ci.yml   — Lint + 5 security scanners + build/push to Artifact Registry
     cd.yml   — Update docker-compose.yml image tags → commit
-    (Secrets: GCP_PROJECT_ID, GCP_REGION, GCP_WIF_PROVIDER, GCP_SA_EMAIL, SNYK_TOKEN, SONAR_TOKEN, SONAR_HOST_URL)
+    (Secrets: GCP_WIF_PROVIDER, GCP_SA_EMAIL, etc.)
 
-  theepicbook/           — Node.js application (Express + Sequelize + MySQL)
-  nginx/                 — Nginx reverse proxy config (listens on :80 → backend:8080)
+  theepicbook/           — Node.js application (Sequelize + Express)
+  nginx/                 — Nginx reverse proxy config
   docs/                  — Documentation (DEPLOYMENT_GUIDE.md, blog-post.md)
-  sonar-project.properties — SonarCloud configuration
+  sonar-project.properties — SonarCloud config
 ```
 
 ---
