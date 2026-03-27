@@ -1,10 +1,10 @@
 # CloudOpsHub: Absolute Beginner Deployment Guide
 
-*Deploy a complete Docker-based infrastructure platform on Google Cloud with GitOps and CI/CD in under 30 minutes.*
+*Deploy a complete Docker-based infrastructure platform on Google Cloud with GitOps, CI/CD, and security scanning.*
 
 ---
 
-## 📋 Prerequisites
+## Prerequisites
 
 You need these installed locally:
 
@@ -25,27 +25,34 @@ docker --version   # optional
 
 ---
 
-## 🗺️ Architecture Overview (Simple)
+## Architecture Overview
 
 ```
 GitHub (main branch)
-   ↓ push
-CI Pipeline (GitHub Actions)
-   ↓ build & push images
-GitOps Sync (runs on VM)
-   ↓ every 60s checks Git changes
-   ↓ pulls new images, redeploys
+   |
+   +--> CI Pipeline (GitHub Actions)
+   |      |-- lint (Node.js)
+   |      |-- security-scan (Gitleaks, Trivy, tfsec, Snyk, SonarCloud)
+   |      +-- build-and-push (Docker images -> Artifact Registry)
+   |
+   +--> CD Pipeline (triggered by CI success)
+   |      +-- Updates image tags in gitops/docker-compose.yml -> commits
+   |
+   +--> GitOps Sync (systemd service on VM, polls every 60s)
+          +-- Detects changes -> pulls new images -> redeploys
 ```
 
-**What gets deployed:**
+**What gets deployed (per environment):**
 
 | Component | Description |
 |-----------|-------------|
-| **VM** | Single e2-medium instance (Ubuntu/COS) |
+| **VM** | Single e2-medium instance (Container-Optimized OS) |
 | **App** | Node.js backend + Nginx frontend + MySQL |
-| **Monitoring** | Prometheus + Grafana + Alertmanager |
+| **Monitoring** | Prometheus + Grafana (3 dashboards) + Alertmanager |
 | **Registry** | Google Artifact Registry (Docker images) |
-| **Secrets** | Google Secret Manager (passwords, webhook) |
+| **Secrets** | Google Secret Manager (DB password, Grafana password, Slack webhook) |
+| **Security** | 5 CI scanners: Gitleaks, Trivy, tfsec, Snyk, SonarCloud |
+| **WIF** | Workload Identity Federation (GitHub -> GCP auth, no keys) |
 
 ---
 
@@ -57,40 +64,24 @@ Go to [Google Cloud Console](https://console.cloud.google.com), create a new pro
 
 You'll need:
 - **Project ID**: `YOUR_PROJECT_ID`
+- **Project Number**: Found in the project dashboard (needed for WIF)
 - **Billing**: Must be enabled on the project
-- **APIs to enable**: Compute Engine, Secret Manager, Artifact Registry, IAM
 
-### 1.2 Enable Required APIs (One-time)
-
-In Cloud Console → **APIs & Services** → **Enable APIs** → search and enable:
-
-- Compute Engine API
-- Secret Manager API
-- Artifact Registry API
-- IAM API
-
-Or run:
-```bash
-gcloud services enable compute.googleapis.com \
-  secretmanager.googleapis.com \
-  artifactregistry.googleapis.com \
-  iam.googleapis.com
-```
-
-### 1.3 Create Service Account for GitHub Actions
-
-GitHub Actions needs permission to push Docker images.
+### 1.2 Authenticate gcloud
 
 ```bash
-gcloud iam service-accounts create cloudopshub-ci \
-  --display-name "CloudOpsHub CI/CD Service Account"
-
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-  --member "serviceAccount:cloudopshub-ci@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-  --role "roles/artifactregistry.writer"
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+gcloud auth application-default login
 ```
 
-**Note**: You'll configure Workload Identity Federation later in the GitHub secrets step — this allows GitHub to act as this service account.
+### 1.3 Create Terraform State Bucket
+
+Terraform stores its state remotely in GCS so it persists across machines:
+
+```bash
+gsutil mb -p YOUR_PROJECT_ID -l us-central1 gs://YOUR_PROJECT_ID-cloudopshub-tf-state
+```
 
 ---
 
@@ -103,32 +94,33 @@ git clone https://github.com/your-username/CloudOpsHub.git
 cd CloudOpsHub
 ```
 
-If you want to use a different repository name, you'll need to update `infra/variables.tf` accordingly.
+### 2.2 Authenticate GitHub CLI
 
-### 2.2 Set GitHub Secrets
+```bash
+gh auth login
+```
 
-The CI/CD and Terraform need these secrets stored in GitHub (Repository → Settings → Secrets and variables → Actions):
+### 2.3 Set GitHub Secrets
+
+The CI/CD pipeline needs these secrets:
 
 | Secret Name | Value | How to get |
 |-------------|-------|------------|
 | `GCP_PROJECT_ID` | Your GCP project ID | From Step 1.1 |
 | `GCP_REGION` | GCP region (e.g., `us-central1`) | Your choice |
-| `GCP_WIF_PROVIDER` | Workload Identity Provider | After `terraform apply` (see below) |
-| `GCP_SA_EMAIL` | Service account email | `cloudopshub-ci@YOUR_PROJECT_ID.iam.gserviceaccount.com` |
+| `GCP_WIF_PROVIDER` | Workload Identity Provider path | After `terraform apply` (Step 3.3) |
+| `GCP_SA_EMAIL` | Service account email | After `terraform apply` (Step 3.3) |
+| `SNYK_TOKEN` | Snyk API token (optional) | https://app.snyk.io/account |
+| `SONAR_TOKEN` | SonarCloud token (optional) | https://sonarcloud.io/account/security |
+| `SONAR_HOST_URL` | `https://sonarcloud.io` (optional) | Fixed value |
 
-Set them with GitHub CLI:
+Set the ones you have now:
 ```bash
-cd /path/to/CloudOpsHub
-gh repo clone your-username/CloudOpsHub
-cd CloudOpsHub
-
 gh secret set GCP_PROJECT_ID -b "YOUR_PROJECT_ID"
 gh secret set GCP_REGION -b "us-central1"
-gh secret set GCP_WIF_PROVIDER -b "will-get-after-first-terraform-apply"
-gh secret set GCP_SA_EMAIL -b "cloudopshub-ci@YOUR_PROJECT_ID.iam.gserviceaccount.com"
 ```
 
-**Note**: `GCP_WIF_PROVIDER` will be filled in after you run Terraform the first time (we'll copy the output).
+**Note**: `GCP_WIF_PROVIDER` and `GCP_SA_EMAIL` will be set after Terraform apply (Step 3.3). Security scan tokens are optional — those scans will gracefully fail without them.
 
 ---
 
@@ -136,36 +128,41 @@ gh secret set GCP_SA_EMAIL -b "cloudopshub-ci@YOUR_PROJECT_ID.iam.gserviceaccoun
 
 ### 3.1 Prepare Terraform Variables
 
-Copy the example tfvars file and edit with your values:
-
 ```bash
 cd infra
-cp dev.tfvars.example dev.tfvars
+cp dev.tfvars.example YOUR_ENV.tfvars
 ```
 
-Edit `dev.tfvars` (use `nano`/`vim`/VS Code):
+Edit the tfvars file (replace `YOUR_ENV` with `dev`, `staging`, or `production`):
 
 ```hcl
-project_id    = "YOUR_PROJECT_ID"        # GCP project ID
-project_name  = "cloudopshub"            # can be anything lowercase
-environment   = "dev"                    # dev, staging, production
-region        = "us-central1"            # or your preferred region
-zone          = "us-central1-a"          # must match region
-instance_type = "e2-medium"              # VM size
+project_id    = "YOUR_PROJECT_ID"
+project_name  = "cloudopshub"
+environment   = "staging"               # dev, staging, or production
+region        = "us-central1"
+zone          = "us-central1-a"
+instance_type = "e2-medium"
 github_repo   = "your-username/CloudOpsHub"
 
-# Generate secure passwords (run in terminal):
-# openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 20
+# Generate secure passwords:
+#   openssl rand -base64 15
 db_password       = "YOUR_DB_PASSWORD_HERE"
 grafana_password  = "YOUR_GRAFANA_PASSWORD_HERE"
-slack_webhook_url = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"  # optional, placeholder works
+slack_webhook_url = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
 ```
 
 ### 3.2 Initialize and Apply Terraform
 
+For your first environment (dev):
 ```bash
 terraform init
 terraform apply -var-file=dev.tfvars
+```
+
+For additional environments (staging, production), use workspaces:
+```bash
+terraform workspace new staging
+terraform apply -var-file=staging.tfvars
 ```
 
 You'll see a plan summary:
@@ -173,293 +170,360 @@ You'll see a plan summary:
 Plan: 28 to add, 0 to change, 0 to destroy.
 ```
 
-Type `yes` to confirm.
-
-**Wait 2-3 minutes** — Terraform creates:
-- VPC network & firewall
+Type `yes` to confirm. **Wait 2-3 minutes** — Terraform creates:
+- VPC network, subnet & firewall rules
 - Service Account & IAM roles
 - Artifact Registry repository
-- Secrets in Secret Manager (you'll see them in Cloud Console)
+- 3 Secrets in Secret Manager (DB password, Grafana password, Slack webhook)
 - VM instance with static IP
-- Workload Identity Federation (for GitHub Actions)
+- Workload Identity Federation pool & provider
 
-### 3.3 Get Terraform Outputs
-
-After apply completes, run:
+### 3.3 Get Terraform Outputs & Update GitHub Secrets
 
 ```bash
 terraform output
 ```
 
-Copy these values — you'll need them:
-
-| Output | What it is |
-|--------|------------|
-| `vm_ip` | Static IP of your VM (e.g., `35.188.65.76`) |
-| `wif_provider` | Workload Identity Provider path |
-| `service_account_email` | CI service account email |
-| `app_url` | Your app URL |
-| `grafana_url` | Grafana dashboard URL |
-| `prometheus_url` | Prometheus metrics URL |
-
----
-
-## Step 4: Update GitHub Secrets with Terraform Outputs
-
-Now set the `GCP_WIF_PROVIDER` secret (Step 2.2) with the value from `terraform output wif_provider`:
-
-```bash
-gh secret set GCP_WIF_PROVIDER -b "projects/YOUR_PROJECT_NUMBER/locations/global/workloadIdentityPools/cloudopshub-github-dev/providers/github-provider"
+You'll see:
+```
+app_url               = "http://YOUR_VM_IP"
+artifact_registry_url = "us-central1-docker.pkg.dev/YOUR_PROJECT_ID/cloudopshub-docker"
+grafana_url           = "http://YOUR_VM_IP:3000"
+prometheus_url        = "http://YOUR_VM_IP:9090"
+service_account_email = "cloudopshub-app-ENV@YOUR_PROJECT_ID.iam.gserviceaccount.com"
+vm_ip                 = "YOUR_VM_IP"
+vm_name               = "cloudopshub-app-ENV"
+wif_provider          = "projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/cloudopshub-github-ENV/providers/github-provider"
 ```
 
-Replace with your actual output from `terraform output wif_provider`.
+Now update the GitHub secrets you couldn't set earlier:
+```bash
+gh secret set GCP_WIF_PROVIDER -b "$(terraform output -raw wif_provider)"
+gh secret set GCP_SA_EMAIL -b "$(terraform output -raw service_account_email)"
+```
 
 ---
 
-## Step 5: Wait for Initial Deployment
+## Step 4: Wait for Initial Deployment
 
 The VM automatically boots and runs a startup script that:
-- Installs Docker & Docker Compose
-- Clones this GitHub repository
-- Starts the **GitOps sync agent** (systemd service)
-- Fetches secrets from Secret Manager
-- Deploys the full app stack using `docker-compose`
+1. Installs Docker Compose
+2. Authenticates to Artifact Registry
+3. Fetches secrets from Secret Manager
+4. Writes `.env` file with all config
+5. Clones this GitHub repository
+6. Creates and starts the **GitOps sync** systemd service
+7. Deploys the full app stack using `docker-compose`
 
-**This takes 2-5 minutes** after Terraform apply.
+**This takes 3-5 minutes** after Terraform apply.
 
-You can watch the VM boot:
+Watch the VM boot progress:
 ```bash
-gcloud compute ssh cloudopshub-app-dev --zone=us-central1-a --tunnel-through-iap \
+gcloud compute ssh cloudopshub-app-ENV --zone=us-central1-a --tunnel-through-iap \
   --ssh-flag="-o StrictHostKeyChecking=no" \
   --command="sudo journalctl -u google-startup-scripts -f"
 ```
 
+(Replace `ENV` with your environment name: `dev`, `staging`, etc.)
+
 ---
 
-## Step 6: Verify Deployment
+## Step 5: Verify Deployment
 
-### 6.1 Check VM is Running
+### 5.1 Check VM is Running
 
 ```bash
 gcloud compute instances list
 ```
 
-Find `cloudopshub-app-dev` — status should be `RUNNING`.
+Or in **GCP Console**: Compute Engine > VM instances
 
-### 6.2 Check Containers
+### 5.2 Check Containers
 
 ```bash
-gcloud compute ssh cloudopshub-app-dev --zone=us-central1-a --tunnel-through-iap \
+gcloud compute ssh cloudopshub-app-ENV --zone=us-central1-a --tunnel-through-iap \
   --ssh-flag="-o StrictHostKeyChecking=no" \
-  --command="sudo docker ps"
+  --command="sudo docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
 ```
 
-You should see 7 containers:
-- `gitops-frontend-1`
-- `gitops-backend-1`
-- `gitops-database-1`
-- `gitops-prometheus-1`
-- `gitops-grafana-1`
-- `gitops-alertmanager-1`
-- `gitops-node-exporter-1`
+You should see 7 containers all running:
 
-### 6.3 Access the App
+| Container | Port | Purpose |
+|-----------|------|---------|
+| `gitops-frontend-1` | 80 | Nginx reverse proxy + static files |
+| `gitops-backend-1` | 8080 | Node.js Express API |
+| `gitops-database-1` | 3306 | MySQL database |
+| `gitops-prometheus-1` | 9090 | Metrics collection |
+| `gitops-grafana-1` | 3000 | Dashboards & visualization |
+| `gitops-alertmanager-1` | 9093 | Alert routing (Slack) |
+| `gitops-node-exporter-1` | 9100 | Host metrics exporter |
 
-Open browser to `http://YOUR_VM_IP` (from `terraform output vm_ip`).
+### 5.3 Access the App
 
-You should see **TheEpicBook** homepage.
+| Service | URL | Auth |
+|---------|-----|------|
+| **App** | `http://YOUR_VM_IP` | None |
+| **Grafana** | `http://YOUR_VM_IP:3000` | `admin` / your grafana_password |
+| **Prometheus** | `http://YOUR_VM_IP:9090` | None |
+| **Alertmanager** | `http://YOUR_VM_IP:9093` | None |
 
-### 6.4 Access Monitoring
+Grafana comes with 3 pre-configured dashboards:
+- **Infrastructure Overview** — CPU, memory, disk, network, system load
+- **Application & Monitoring Health** — Container up/down, active alerts, scrape metrics
+- **Epicbook** — App-specific dashboard
 
-| Tool | URL | Login |
-|------|-----|-------|
-| Grafana | `http://YOUR_VM_IP:3000` | `admin` / `YOUR_GRAFANA_PASSWORD` |
-| Prometheus | `http://YOUR_VM_IP:9090` | no auth |
+### 5.4 Check from GCP Console
 
-Grafana should show 3 dashboards:
-- Infrastructure Overview
-- Application & Monitoring Health
-- Epicbook (pre-seeded)
+1. Go to https://console.cloud.google.com
+2. Select your project from the top dropdown
+3. Navigate to:
+
+| Resource | Console Path |
+|----------|-------------|
+| **VM** | Compute Engine > VM instances |
+| **VM Logs** | Click VM name > Serial port 1 (console) |
+| **SSH** | Click VM name > SSH button > Open in browser window |
+| **VPC/Firewall** | VPC Network > VPC networks |
+| **Static IP** | VPC Network > IP addresses |
+| **Artifact Registry** | Artifact Registry > Repositories |
+| **Secrets** | Security > Secret Manager |
+| **Service Accounts** | IAM & Admin > Service Accounts |
+| **WIF** | IAM & Admin > Workload Identity Federation |
 
 ---
 
-## Step 7: Test CI/CD Pipeline
+## Step 6: Test CI/CD Pipeline
 
-### 7.1 Make a Code Change
-
-Edit any file in the repository, for example change the app title:
+### 6.1 Make a Code Change
 
 ```bash
-cd theepicbook/views/layouts/main.handlebars
-# Find and change the title, save
-```
-
-### 7.2 Commit & Push
-
-```bash
-git add .
-git commit -m "test: update homepage title"
+# Edit any file, e.g.:
+echo "<!-- test -->" >> theepicbook/views/layouts/main.handlebars
+git add theepicbook/views/layouts/main.handlebars
+git commit -m "test: verify CI/CD pipeline"
 git push
 ```
 
-### 7.3 Watch GitHub Actions
+### 6.2 Watch GitHub Actions
 
-Go to your GitHub repo → **Actions** → you should see:
-1. **CI** workflow running → builds and pushes 3 Docker images to Artifact Registry
-2. **CD** workflow triggers automatically after CI success → updates image tags in `gitops/docker-compose.yml` and pushes
+Go to your GitHub repo > **Actions** tab, or use CLI:
 
-### 7.4 Watch GitOps Sync Redeploy
-
-On the VM, the `gitops-sync` systemd service polls Git every 60 seconds. When it detects changes, it pulls new images and restarts containers.
-
-Check sync logs:
 ```bash
-gcloud compute ssh cloudopshub-app-dev --zone=us-central1-a --tunnel-through-iap \
+gh run list --limit 3
+gh run watch    # watch the latest run live
+```
+
+You should see the CI pipeline with 3 jobs:
+
+1. **lint** — Runs `npm ci` + `npm run lint`
+2. **security-scan** — Runs 5 security scanners (all `continue-on-error`)
+3. **build-and-push** — Builds 3 Docker images, pushes to Artifact Registry
+
+Then the **CD** pipeline triggers automatically:
+- Updates image tags in `gitops/docker-compose.yml`
+- Commits with `[skip ci]` to avoid infinite loop
+
+### 6.3 Watch GitOps Sync Redeploy
+
+```bash
+gcloud compute ssh cloudopshub-app-ENV --zone=us-central1-a --tunnel-through-iap \
   --ssh-flag="-o StrictHostKeyChecking=no" \
   --command="sudo journalctl -u gitops-sync -f"
 ```
 
-Within 60 seconds of GitHub Actions completing, you should see:
+Within 60 seconds of CD completing, you should see:
 ```
 Change detected: <old-sha> -> <new-sha>
 Files changed — redeploying...
 Sync successful
 ```
 
-Reload your app URL (`http://YOUR_VM_IP`) — the change should be live.
-
 ---
 
-## Step 8: Configure Slack Alerts (Optional)
+## Step 7: Configure Slack Alerts (Optional)
 
-If you have a Slack workspace and want alerts:
-
-### 8.1 Create Slack Webhook
+### 7.1 Create Slack Webhook
 
 1. Go to https://api.slack.com/apps
-2. Create a new app → **Incoming Webhooks**
+2. Create a new app > **Incoming Webhooks**
 3. Activate Incoming Webhooks
-4. Add a new webhook → select a channel (e.g., `#devops`)
-5. Copy the webhook URL (looks like `https://hooks.slack.com/services/T0.../.../...`)
+4. Add new webhook > select a channel (e.g., `#devops`)
+5. Copy the webhook URL
 
-### 8.2 Update Secret Manager with Webhook
+### 7.2 Update the Webhook
 
-You may need to update the secret value (Terraform manages it, so you can either update `dev.tfvars` and reapply, or manually in Secret Manager):
-
+**Option A: Via Terraform (recommended)**
 ```bash
-# Option A: Update via Terraform (recommended)
-# Edit dev.tfvars, change slack_webhook_url, then:
-terraform apply -var-file=dev.tfvars
+# Edit your .tfvars file, update slack_webhook_url, then:
+terraform apply -var-file=staging.tfvars
+```
 
-# Option B: Manual (temporary, will be overwritten by next apply)
-gcloud secrets versions add cloudopshub-slack-webhook-dev \
+**Option B: Manual (temporary, overwritten on next apply)**
+```bash
+gcloud secrets versions add cloudopshub-slack-webhook-ENV \
   --project=YOUR_PROJECT_ID \
   --data-file=<(echo "YOUR_SLACK_WEBHOOK_URL")
 ```
 
-### 8.3 Set Alertmanager Channel
+### 7.3 Change Alert Channel
 
-The alertmanager config sends to `#devops` by default. To change it:
+The alertmanager config defaults to `#devops`. To change:
 
 ```bash
-sed -i 's|channel: "#devops"|channel: "#your-channel"|' gitops/dev/monitoring/alertmanager.yml
-git add gitops/dev/monitoring/alertmanager.yml
+# Edit the config for your environment:
+sed -i 's|channel: "#devops"|channel: "#your-channel"|' gitops/ENV/monitoring/alertmanager.yml
+git add gitops/ENV/monitoring/alertmanager.yml
 git commit -m "chore: update alertmanager channel"
 git push
 ```
 
 GitOps sync will redeploy alertmanager automatically.
 
+**Important**: The alertmanager config uses `SLACK_WEBHOOK_PLACEHOLDER` as the webhook URL. The GitOps sync script replaces this with the real webhook from Secret Manager at deploy time. Do NOT change this placeholder manually.
+
 ---
 
-## Step 9: Common Commands & Troubleshooting
+## Step 8: Security Scanning
+
+The CI pipeline includes 5 security scanners that run on every push:
+
+| Scanner | What it does | Needs secret? |
+|---------|-------------|---------------|
+| **Gitleaks** | Detects hardcoded secrets/credentials in git history | `GITLEAKS_LICENSE` (optional, works without) |
+| **Trivy FS** | Scans source code for vulnerabilities | No |
+| **tfsec (Trivy)** | Scans Terraform files for misconfigurations | No |
+| **Snyk Code** | SAST — static application security testing | `SNYK_TOKEN` (required) |
+| **SonarCloud** | Code quality + security analysis | `SONAR_TOKEN` (required) |
+
+All scanners use `continue-on-error: true` — the pipeline **continues regardless** of scan results. Only `lint` must pass for images to build.
+
+### Setting up optional tokens
+
+**Snyk:**
+1. Sign up at https://snyk.io
+2. Go to Account Settings > API Token
+3. `gh secret set SNYK_TOKEN -b "YOUR_TOKEN"`
+
+**SonarCloud:**
+1. Sign up at https://sonarcloud.io (link your GitHub)
+2. Create a new project for your repo
+3. Go to Account > Security > Generate token
+4. `gh secret set SONAR_TOKEN -b "YOUR_TOKEN"`
+5. `gh secret set SONAR_HOST_URL -b "https://sonarcloud.io"`
+
+---
+
+## Step 9: Multi-Environment Deployment
+
+Terraform workspaces isolate state per environment. Each environment gets its own VM, VPC, secrets, and WIF pool.
+
+### Switch between workspaces
+
+```bash
+cd infra
+terraform workspace list              # see all workspaces
+terraform workspace select staging    # switch to staging
+terraform workspace select default    # switch to dev
+terraform output                      # see outputs for current workspace
+```
+
+### Deploy a new environment
+
+```bash
+cd infra
+
+# Create workspace
+terraform workspace new production
+
+# Create tfvars (use new passwords!)
+cp dev.tfvars.example production.tfvars
+# Edit production.tfvars with environment = "production"
+
+# Apply
+terraform apply -var-file=production.tfvars
+
+# Update GitHub secrets with new WIF/SA values
+gh secret set GCP_WIF_PROVIDER -b "$(terraform output -raw wif_provider)"
+gh secret set GCP_SA_EMAIL -b "$(terraform output -raw service_account_email)"
+```
+
+### Destroy an environment
+
+```bash
+terraform workspace select staging
+terraform destroy -var-file=staging.tfvars
+```
+
+**Note**: When switching the active environment for CI/CD, update `GCP_WIF_PROVIDER` and `GCP_SA_EMAIL` secrets to point to the target environment's values.
+
+---
+
+## Step 10: Common Commands & Troubleshooting
 
 ### Useful Commands
 
 | Task | Command |
 |------|---------|
-| **Check VM status** | `gcloud compute instances describe cloudopshub-app-dev --zone=us-central1-a` |
-| **View VM logs** | `gcloud compute ssh ... --command="sudo journalctl -u google-startup-scripts"` |
-| **View GitOps sync logs** | `gcloud compute ssh ... --command="sudo journalctl -u gitops-sync -f"` |
-| **Docker logs for a container** | `gcloud compute ssh ... --command="sudo docker logs gitops-backend-1"` |
-| **Restart all services** | `gcloud compute ssh ... --command="cd /var/lib/gitops/repo && sudo /var/lib/toolbox/docker-compose -f gitops/docker-compose.yml -f gitops/overlays/dev/docker-compose.override.yml restart"` |
-| **SSH into VM** | `gcloud compute ssh cloudopshub-app-dev --zone=us-central1-a --tunnel-through-iap` |
+| **SSH into VM** | `gcloud compute ssh cloudopshub-app-ENV --zone=us-central1-a --tunnel-through-iap` |
+| **Check all containers** | `... --command="sudo docker ps"` |
+| **View container logs** | `... --command="sudo docker logs gitops-backend-1 --tail 50"` |
+| **View GitOps sync logs** | `... --command="sudo journalctl -u gitops-sync -f"` |
+| **View startup script logs** | `... --command="sudo journalctl -u google-startup-scripts"` |
+| **Restart all containers** | `... --command="cd /var/lib/gitops/repo && sudo docker compose -f gitops/docker-compose.yml up -d"` |
+| **Restart GitOps sync** | `... --command="sudo systemctl restart gitops-sync"` |
+| **Check .env file** | `... --command="sudo cat /var/lib/cloudopshub/.env"` |
+| **Terraform outputs** | `terraform output` |
 | **Terraform state** | `terraform state list` |
-| **Destroy everything** | `terraform destroy -var-file=dev.tfvars` |
+| **CI/CD status** | `gh run list --limit 5` |
+| **Watch a CI run** | `gh run watch` |
 
 ### Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| `Permission denied` when SSH | Use `--tunnel-through-iap` flag (required on COS with OS Login) |
-| App returns 502/503 | Check backend container: `sudo docker logs gitops-backend-1` |
+| SSH times out | Use `--tunnel-through-iap` flag (required on COS with OS Login) |
+| App returns 502/503 | Check backend: `sudo docker logs gitops-backend-1` |
+| Backend crashes with `Cannot read properties of undefined (reading 'use_env_variable')` | Add missing environment to `theepicbook/config/config.json` (must have entry for dev, staging, production) |
 | Images not pulling | Verify CI workflow succeeded and images exist in Artifact Registry |
-| Alertmanager not reloading after config change | GitOps script now force-recreates; if not, manually: `docker-compose stop alertmanager && docker-compose rm -f alertmanager && docker-compose up -d alertmanager` |
-| Ports not accessible | Check firewall rule includes the port (9093 for alertmanager) |
-| GitOps sync stuck | Restart service: `sudo systemctl restart gitops-sync` |
+| Alertmanager not sending to Slack | Check that config uses `SLACK_WEBHOOK_PLACEHOLDER` (not `${SLACK_WEBHOOK_URL}`), and that the secret is set in Secret Manager |
+| Alertmanager not reloading config | GitOps sync force-recreates it; manually: `sudo docker compose stop alertmanager && sudo docker compose rm -f alertmanager && sudo docker compose up -d alertmanager` |
+| Ports not accessible | Check firewall rule: Compute Engine > VM > Network tags should include `web` |
+| Git push rejected | Remote has newer commits from CD: `git pull --rebase && git push` |
+| `build-and-push` fails on auth | Verify `GCP_WIF_PROVIDER` and `GCP_SA_EMAIL` secrets match current Terraform outputs |
+| Security scans fail | Expected if tokens not set. Pipeline continues regardless (`continue-on-error: true`) |
 
 ---
 
-## Step 10: Deploy Additional Environments (Staging/Production)
-
-### 10.1 Prepare Staging
-
-```bash
-cd infra
-terraform workspace new staging
-cp dev.tfvars staging.tfvars
-# Edit staging.tfvars:
-# - environment = "staging"
-# - change db_password, grafana_password to new values
-# - change instance_type if needed (e.g., e2-standard-2)
-terraform apply -var-file=staging.tfvars
-```
-
-Copy the outputs (`vm_ip`, `wif_provider`, etc.) and update GitHub secrets for staging (you can use same secrets or create new ones with naming convention like `GCP_WIF_PROVIDER_STAGING`).
-
-**Note**: The GitOps sync will automatically use the `staging` environment based on the `GITOPS_ENVIRONMENT` environment variable passed by the startup script. You'll need a separate Terraform apply to provision a staging VM.
-
-### 10.2 Deploy Production
-
-Same as staging, but:
-- Use larger instance type (e.g., `e2-standard-4`)
-- Consider using a load balancer (not in this simplified setup)
-- Use stronger, unique passwords
-- Enable additional monitoring/alerts
-
----
-
-## 🎉 You're Done!
+## You're Done!
 
 Your CloudOpsHub platform is now:
-- ✅ Running on a single VM
-- ✅ Auto-deploying via GitOps on code changes
-- ✅ Fully containerized with Docker Compose
-- ✅ Monitorable via Grafana + Prometheus
-- ✅ Alerting to Slack (if configured)
+- Running on a single GCP VM per environment
+- Auto-deploying via GitOps on every code push
+- Fully containerized with Docker Compose (7 services)
+- Security-scanned on every CI run (5 tools)
+- Monitorable via Grafana (3 dashboards) + Prometheus
+- Alerting to Slack via Alertmanager (if configured)
 
 ---
 
-## 📚 Next Steps
+## Next Steps
 
-- Customize Grafana dashboards (`gitops/*/monitoring/dashboards/`)
+- Add SSL/TLS (use certbot with nginx or a GCP load balancer)
+- Set up database backups (volume snapshots or mysqldump cron)
 - Add more alert rules (`gitops/*/monitoring/alert.rules.yml`)
-- Set up database backups (volume snapshots or export)
-- Add SSL/TLS (use certbot with nginx)
-- Scale horizontally (add more VMs behind load balancer — requires more Terraform)
+- Customize Grafana dashboards (`gitops/*/monitoring/dashboards/`)
+- Scale horizontally (add load balancer + multiple VMs)
 - Monitor costs in GCP Billing Console
 
 ---
 
-## 📞 Need Help?
+## Need Help?
 
 1. **Check logs** — VM: `journalctl -u gitops-sync`; Containers: `docker logs <container>`
-2. **Verify Terraform state** — `terraform plan -var-file=dev.tfvars`
-3. **Read CLAUDE.md** in repo for architecture details
+2. **Verify Terraform state** — `terraform plan -var-file=ENV.tfvars`
+3. **Check GCP Console** — Compute Engine, Artifact Registry, Secret Manager
 4. **Open an Issue** on GitHub with:
    - What you were trying
    - Error messages
    - `terraform output` (redact secrets)
-   - `gcloud compute ssh ... --command="sudo docker ps"` output
-
-Happy deploying! 🚀
+   - `sudo docker ps` output
