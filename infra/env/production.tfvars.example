@@ -9,4 +9,4 @@ create_artifact_registry = false  # Set true only for the first environment you 
 
 db_password       = "CHANGE_ME"
 grafana_password  = "CHANGE_ME"
-slack_webhook_url = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+slack_webhook_url = "https://hooks.slack.com/services/TODO/REPLACE-WITH-YOUR-WEBHOOK"

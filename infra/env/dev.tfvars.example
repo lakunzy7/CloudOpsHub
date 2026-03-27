@@ -1,0 +1,17 @@
+# CloudOpsHub — Dev Environment
+# Copy to dev.tfvars and fill in values before deploying.
+# First environment? Set create_artifact_registry = true.
+
+project_id               = "YOUR_PROJECT_ID"
+project_name             = "cloudopshub"
+environment              = "dev"
+region                   = "us-central1"
+zone                     = "us-central1-a"
+instance_type            = "e2-medium"
+github_repo              = "YOUR_USERNAME/CloudOpsHub"
+create_artifact_registry = true  # Creates shared Docker registry (first env only)
+
+# Generate with: openssl rand -base64 16
+db_password              = "CHANGE_ME"
+grafana_password         = "CHANGE_ME"
+slack_webhook_url        = "https://hooks.slack.com/services/TODO/REPLACE-WITH-YOUR-WEBHOOK"

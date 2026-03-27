@@ -128,41 +128,50 @@ gh secret set GCP_REGION -b "us-central1"
 
 ### 3.1 Prepare Terraform Variables
 
+The project uses a modular Terraform structure with environment-specific variable files in `infra/env/`.
+
 ```bash
-cd infra
-cp dev.tfvars.example YOUR_ENV.tfvars
+cd infra/env
+cp dev.tfvars.example your-env.tfvars
 ```
 
-Edit the tfvars file (replace `YOUR_ENV` with `dev`, `staging`, or `production`):
+Edit `your-env.tfvars`:
 
 ```hcl
-project_id    = "YOUR_PROJECT_ID"
-project_name  = "cloudopshub"
-environment   = "staging"               # dev, staging, or production
-region        = "us-central1"
-zone          = "us-central1-a"
-instance_type = "e2-medium"
-github_repo   = "your-username/CloudOpsHub"
+project_id               = "YOUR_PROJECT_ID"
+project_name             = "cloudopshub"
+environment              = "staging"               # dev, staging, or production
+region                   = "us-central1"
+zone                     = "us-central1-a"
+instance_type            = "e2-medium"
+github_repo              = "your-username/CloudOpsHub"
+create_artifact_registry = false  # true only for the FIRST environment you deploy
 
 # Generate secure passwords:
 #   openssl rand -base64 15
-db_password       = "YOUR_DB_PASSWORD_HERE"
-grafana_password  = "YOUR_GRAFANA_PASSWORD_HERE"
-slack_webhook_url = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+db_password              = "YOUR_DB_PASSWORD_HERE"
+grafana_password         = "YOUR_GRAFANA_PASSWORD_HERE"
+slack_webhook_url        = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
 ```
+
+**Important**: `create_artifact_registry` controls whether Terraform creates the shared Docker registry. Set it to `true` for the first environment you deploy (usually `dev`). All subsequent environments must use `false` to avoid "resource already exists" errors.
 
 ### 3.2 Initialize and Apply Terraform
 
-For your first environment (dev):
+For your first environment (usually dev):
+
 ```bash
+cd /path/to/CloudOpsHub/infra
 terraform init
-terraform apply -var-file=dev.tfvars
+terraform apply -var-file=env/dev.tfvars
 ```
 
 For additional environments (staging, production), use workspaces:
+
 ```bash
+cd /path/to/CloudOpsHub/infra
 terraform workspace new staging
-terraform apply -var-file=staging.tfvars
+terraform apply -var-file=env/staging.tfvars
 ```
 
 You'll see a plan summary:
@@ -436,11 +445,11 @@ cd infra
 terraform workspace new production
 
 # Create tfvars (use new passwords!)
-cp dev.tfvars.example production.tfvars
-# Edit production.tfvars with environment = "production"
+cp env/dev.tfvars.example env/production.tfvars
+# Edit env/production.tfvars with environment = "production", create_artifact_registry = false
 
 # Apply
-terraform apply -var-file=production.tfvars
+terraform apply -var-file=env/production.tfvars
 
 # Update GitHub secrets with new WIF/SA values
 gh secret set GCP_WIF_PROVIDER -b "$(terraform output -raw wif_provider)"
@@ -451,7 +460,7 @@ gh secret set GCP_SA_EMAIL -b "$(terraform output -raw service_account_email)"
 
 ```bash
 terraform workspace select staging
-terraform destroy -var-file=staging.tfvars
+terraform destroy -var-file=env/staging.tfvars
 ```
 
 **Note**: When switching the active environment for CI/CD, update `GCP_WIF_PROVIDER` and `GCP_SA_EMAIL` secrets to point to the target environment's values.
