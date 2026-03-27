@@ -1,0 +1,11 @@
+project_id    = "expandox-cloudehub"
+project_name  = "cloudopshub"
+environment   = "production"
+region        = "us-central1"
+zone          = "us-central1-a"
+instance_type = "e2-medium"
+github_repo   = "lakunzy7/CloudOpsHub"
+
+db_password       = "CHANGE_ME"
+grafana_password  = "CHANGE_ME"
+slack_webhook_url = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"

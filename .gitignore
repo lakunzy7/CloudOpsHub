@@ -29,5 +29,8 @@ Thumbs.db
 .claude/
 CLAUDE.md
 
+# Blog post (Notion only)
+docs/blog-post.md
+
 # Nginx build artifact
 nginx/public/
