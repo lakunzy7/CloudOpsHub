@@ -4,7 +4,8 @@ environment   = "production"
 region        = "us-central1"
 zone          = "us-central1-a"
 instance_type = "e2-medium"
-github_repo   = "lakunzy7/CloudOpsHub"
+github_repo              = "lakunzy7/CloudOpsHub"
+create_artifact_registry = false  # Set true only for the first environment you deploy
 
 db_password       = "CHANGE_ME"
 grafana_password  = "CHANGE_ME"

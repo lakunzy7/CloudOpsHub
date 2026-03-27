@@ -58,3 +58,9 @@ variable "github_repo" {
   type        = string
   default     = "lakunzy7/CloudOpsHub"
 }
+
+variable "create_artifact_registry" {
+  description = "Whether to create the Artifact Registry repo (set true for first environment only)"
+  type        = bool
+  default     = true
+}

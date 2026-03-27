@@ -37,7 +37,10 @@ resource "google_project_service" "apis" {
 }
 
 # ── Artifact Registry (shared across environments, no env suffix) ──
+# Set create_artifact_registry = true for the first environment deployed,
+# false for subsequent environments (the repo already exists in GCP).
 resource "google_artifact_registry_repository" "docker" {
+  count         = var.create_artifact_registry ? 1 : 0
   location      = var.region
   repository_id = "${var.project_name}-docker"
   format        = "DOCKER"

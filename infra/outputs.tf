@@ -15,7 +15,7 @@ output "service_account_email" {
 
 output "artifact_registry_url" {
   description = "Docker registry URL"
-  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker.repository_id}"
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${var.project_name}-docker"
 }
 
 output "wif_provider" {
