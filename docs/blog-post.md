@@ -1,4 +1,4 @@
-# Building a Modular Terraform Infrastructure with GitOps and CI/CD — A Complete Walkthrough
+# CloudOpsHub is an automated Docker-based infrastructure platform with GitOps and continuous delivery
 
 ---
 
